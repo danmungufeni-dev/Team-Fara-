@@ -1,0 +1,7 @@
+.gemini/
+.gitconfig
+etc/
+logs/
+runtime/
+usr/
+web/
