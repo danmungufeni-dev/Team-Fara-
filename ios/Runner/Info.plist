@@ -66,5 +66,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>PadCare requires location access to discover nearby sanitary pad distribution hubs, health centers, and provide realtime walking directions.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>PadCare requires location access to discover nearby sanitary pad distribution hubs and provide realtime navigation.</string>
 </dict>
 </plist>

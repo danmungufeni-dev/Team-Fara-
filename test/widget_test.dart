@@ -24,7 +24,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
 
     // Verify app brand presence
-    expect(find.text('PadCare Uganda'), findsOneWidget);
+    expect(find.text('PadCare'), findsWidgets);
     expect(find.text('Discreet Pickup Guaranteed'), findsOneWidget);
   });
 }

@@ -11,6 +11,9 @@ abstract class AppConstants {
   static const String envTranslationApiUrl = 'TRANSLATION_API_URL';
   static const String defaultTranslationApiUrl = 'http://localhost:8000';
   static const String envGoogleMapsApiKey = 'GOOGLE_MAPS_API_KEY';
+  static const String envSupabaseUrl = 'SUPABASE_URL';
+  static const String envSupabaseAnonKey = 'SUPABASE_ANON_KEY';
+  static const String envGeminiApiKey = 'GEMINI_API_KEY';
 
   // Storage keys
   static const String storageKeyUserToken = 'padcare_auth_token';
@@ -20,6 +23,9 @@ abstract class AppConstants {
   static const String storageKeyOfflineQueue = 'padcare_offline_queue';
   static const String storageKeySavedHubs = 'padcare_saved_hubs';
   static const String storageKeyTermsAccepted = 'padcare_terms_accepted';
+  static const String storageKeySupabaseUrl = 'padcare_supabase_url';
+  static const String storageKeySupabaseAnonKey = 'padcare_supabase_anon_key';
+  static const String storageKeyGeminiApiKey = 'padcare_gemini_api_key';
 
   // Seeker Default Voucher
   static const String defaultVoucherCode = 'PAD-749';

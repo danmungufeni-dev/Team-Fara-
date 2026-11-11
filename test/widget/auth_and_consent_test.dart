@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:padcare/features/authentication/security_verification_screen.dart';
 import 'package:padcare/features/authentication/terms_consent_screen.dart';
@@ -8,8 +9,10 @@ void main() {
   testWidgets('WelcomeAuthenticationScreen renders branding and form fields',
       (WidgetTester tester) async {
     await tester.pumpWidget(
-      const MaterialApp(
-        home: WelcomeAuthenticationScreen(),
+      const ProviderScope(
+        child: MaterialApp(
+          home: WelcomeAuthenticationScreen(),
+        ),
       ),
     );
 

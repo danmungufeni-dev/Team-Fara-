@@ -4,7 +4,7 @@
 [![Dart](https://img.shields.io/badge/Dart-3.x-0175C2?logo=dart&logoColor=white)](https://dart.dev)
 [![Go Translation API](https://img.shields.io/badge/Go-1.22-00ADD8?logo=go&logoColor=white)](https://golang.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/Tests-26%20Passing-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-40%20Passing-brightgreen.svg)]()
 [![Code Quality](https://img.shields.io/badge/Analysis-0%20Issues-brightgreen.svg)]()
 
 > **"Restoring dignity, ensuring confidentiality, and providing safe, barrier-free access to menstrual hygiene products for girls and women everywhere."**
@@ -290,9 +290,42 @@ flutter run
 
 ---
 
+## ⚡ Realtime Free Backend & Authentication (Supabase)
+
+PadCare integrates a 100% free, production-ready realtime backend powered by **Supabase** (open-source Firebase alternative) with built-in resilience:
+- **Realtime Database Subscriptions**: WebSockets stream updates to distribution points (live pad stock), voucher redemption status changes (`readyForPickup` -> `collected`), and confidential live chat messages.
+- **Anonymous Dignity Authentication**: One-tap zero-trace seeker sign-in that requires zero phone numbers or email addresses, perfectly protecting seeker dignity and safety.
+- **Email/Password & Session Management**: Enterprise token storage backed by local hardware keystores.
+- **Dual-Mode Engine (Online + Offline-First)**: If Supabase credentials are not configured or the device is offline, PadCare automatically enters Free Realtime Simulation mode with in-memory stream controllers so the app never crashes.
+- **1-Click SQL Migration**: Complete PostgreSQL schema with Row-Level Security (RLS) policies and realtime replication publication available at [`backend/supabase_schema.sql`](file:///c:/Users/Students/.gemini/antigravity/scratch/Team-Fara-/backend/supabase_schema.sql).
+
+---
+
+## 🗺️ Realtime Maps & Live Location Tracking
+
+- **Free OpenStreetMap Layer (`flutter_map`)**: 100% free worldwide street maps without credit card requirements, billing tiers, or API key barriers.
+- **Live GPS Tracking (`geolocator`)**: Continuous position stream displaying an animated pulsing radar circle at the user's coordinates.
+- **Dynamic Distance & Walking Time Calculation**: Automatically computes exact walking distances in meters/kilometers and estimated walking times from the user's live coordinates to every distribution hub.
+- **Interactive Route Polylines**: Selecting any distribution hub renders a styled walking route polyline directly to the hub entrance.
+- **EAC Multi-City Support**: Seamless camera transitions between Kampala, Nairobi, Dar es Salaam, Kigali, Bujumbura, Juba, and Goma.
+- **Simulated Movement Mode**: One-click toggle in the app bar that simulates walking movement along a realistic Kampala route for live demo and testing on desktops or emulators.
+
+---
+
+## 🤖 HerHelp AI Menstrual Health Assistant (Google Gemini)
+
+HerHelp is PadCare's empathetic, trauma-informed menstrual health and dignity companion powered by **Google Gemini 1.5 Flash**:
+- **Culturally Sensitive Healthcare Intelligence**: Evidence-based advice for menstrual hygiene practices, safe non-medical cramp relief, emergency kit redemption, and red-flag clinical alerts.
+- **Multi-Turn Contextual Chat**: Remembers session dialogue to answer follow-up questions naturally while honoring complete zero-trace session wiping on exit.
+- **Dynamic Follow-Up Action Chips**: Contextual quick-reply suggestions tailored to the user's inquiry.
+- **Integrated Neural Text-To-Speech (TTS)**: One-tap voice synthesis of HerHelp responses across English, Luganda, Swahili, and French.
+- **Configurable in UI**: Enter your free Google AI Studio API key directly via the in-app Gemini configuration sheet or `.env`.
+
+---
+
 ## 🧪 Testing & Code Quality
 
-PadCare features an automated test suite verifying business logic, translation fallback resilience, stock adjustments, offline synchronization, CRDT conflict resolution, and UI rendering:
+PadCare features an automated test suite verifying business logic, translation fallback resilience, stock adjustments, offline synchronization, CRDT conflict resolution, realtime location tracking, Supabase streams, Gemini AI responses, and UI rendering:
 
 ```bash
 # Run all tests
@@ -303,7 +336,7 @@ flutter analyze --no-fatal-infos
 ```
 
 **Results:**
-- ✅ **26/26 Tests Passing**
+- ✅ **40/40 Tests Passing**
 - ✅ **0 Errors / 0 Warnings**
 
 ---

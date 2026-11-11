@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_radius.dart';
 import '../../app/theme/app_typography.dart';
-import '../../core/localization/app_locale.dart';
+import '../../core/localization/app_localizations.dart';
+import '../../core/localization/locale_provider.dart';
 import '../../core/responsive/responsive_layout.dart';
 import '../../shared/widgets/dignity_button.dart';
 import '../../shared/widgets/language_selector_sheet.dart';
@@ -24,17 +26,16 @@ class OnboardingSlide {
   });
 }
 
-class UserOnboardingScreen extends StatefulWidget {
+class UserOnboardingScreen extends ConsumerStatefulWidget {
   const UserOnboardingScreen({super.key});
 
   @override
-  State<UserOnboardingScreen> createState() => _UserOnboardingScreenState();
+  ConsumerState<UserOnboardingScreen> createState() => _UserOnboardingScreenState();
 }
 
-class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
+class _UserOnboardingScreenState extends ConsumerState<UserOnboardingScreen> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
-  SupportedLanguage _currentLang = AppLocales.swahili;
 
   final List<OnboardingSlide> _slides = const [
     OnboardingSlide(
@@ -79,6 +80,8 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final currentLang = ref.watch(appLocaleProvider);
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -95,9 +98,9 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
                       onTap: () {
                         LanguageSelectorSheet.show(
                           context,
-                          currentLocaleCode: _currentLang.code,
+                          currentLocaleCode: currentLang.code,
                           onSelect: (lang) {
-                            setState(() => _currentLang = lang);
+                            ref.read(appLocaleProvider.notifier).setLanguage(lang);
                           },
                         );
                       },
@@ -116,7 +119,7 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
                                 size: 16, color: AppColors.primaryContainer),
                             const SizedBox(width: 4),
                             Text(
-                              _currentLang.code.toUpperCase(),
+                              currentLang.code.toUpperCase(),
                               style: AppTypography.labelSM(),
                             ),
                             const Icon(Icons.expand_more,
@@ -138,7 +141,7 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
                               size: 16, color: AppColors.primaryContainer),
                           const SizedBox(width: 6),
                           Text(
-                            'EAC PRIVATE',
+                            context.tr('discreetPickup'),
                             style: AppTypography.labelSM(
                                 color: AppColors.primaryContainer),
                           ),
@@ -147,9 +150,9 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 24),
 
-                // Carousel PageView
+                // Carousel Body
                 Expanded(
                   child: PageView.builder(
                     controller: _pageController,
@@ -159,18 +162,17 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
                     },
                     itemBuilder: (context, index) {
                       final slide = _slides[index];
+
                       return Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          // Graphic hero container
+                          // Central Icon Container
                           Container(
-                            width: 130,
-                            height: 130,
+                            width: 140,
+                            height: 140,
                             decoration: BoxDecoration(
-                              color: AppColors.softLavender,
+                              color: AppColors.secondaryContainer,
                               shape: BoxShape.circle,
-                              border: Border.all(
-                                  color: AppColors.borderSubtle, width: 2),
                             ),
                             child: Center(
                               child: Icon(
@@ -182,42 +184,43 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
                           ),
                           const SizedBox(height: 28),
 
-                          // Slide indicator pill
+                          // Pill badge
                           Container(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 12, vertical: 4),
                             decoration: BoxDecoration(
-                              color: AppColors.surfaceContainerHigh,
+                              color: AppColors.surfaceContainerLow,
                               borderRadius: AppRadius.fullBorder,
+                              border: Border.all(color: AppColors.borderSubtle),
                             ),
                             child: Text(
-                              slide.badgeText,
+                              'Slide ${index + 1} of ${_slides.length}',
                               style: AppTypography.labelSM(
                                   color: AppColors.primaryContainer),
                             ),
                           ),
                           const SizedBox(height: 16),
 
+                          // Slide Titles
                           Text(
-                            slide.title,
+                            context.tr(slide.title),
                             textAlign: TextAlign.center,
-                            style: AppTypography.headlineMD(
-                                color: AppColors.neutralDark),
+                            style: AppTypography.headlineMD(),
                           ),
-                          const SizedBox(height: 8),
-
+                          const SizedBox(height: 6),
                           Text(
-                            slide.subtitle,
+                            context.tr(slide.subtitle),
                             textAlign: TextAlign.center,
                             style: AppTypography.labelLG(
                                 color: AppColors.primaryContainer),
                           ),
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 14),
 
+                          // Slide Description
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 16),
                             child: Text(
-                              slide.description,
+                              context.tr(slide.description),
                               textAlign: TextAlign.center,
                               style: AppTypography.bodyMD(
                                   color: AppColors.neutralMuted),
@@ -255,7 +258,7 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
                   children: [
                     Expanded(
                       child: DignityButton(
-                        text: 'Sign In',
+                        text: context.tr('signIn'),
                         style: DignityButtonStyle.outline,
                         onPressed: () => context.go('/welcome'),
                       ),
@@ -264,8 +267,8 @@ class _UserOnboardingScreenState extends State<UserOnboardingScreen> {
                     Expanded(
                       child: DignityButton(
                         text: _currentPage == _slides.length - 1
-                            ? 'Get Started'
-                            : 'Next',
+                            ? context.tr('getStarted')
+                            : context.tr('next'),
                         onPressed: () {
                           if (_currentPage < _slides.length - 1) {
                             _pageController.nextPage(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:padcare/features/dashboard/padcare_home_dashboard_screen.dart';
 
@@ -10,17 +11,19 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
 
     await tester.pumpWidget(
-      const MaterialApp(
-        home: PadCareHomeDashboardScreen(),
+      const ProviderScope(
+        child: MaterialApp(
+          home: PadCareHomeDashboardScreen(),
+        ),
       ),
     );
 
     await tester.pump();
 
-    expect(find.text('PadCare Uganda'), findsOneWidget);
+    expect(find.text('PadCare'), findsWidgets);
     expect(find.text('Sanitary Pads'), findsOneWidget);
     expect(find.text('Reusable Kits'), findsOneWidget);
-    expect(find.text('Chat with HerHelp AI'), findsOneWidget);
+    expect(find.text('HerHelp Assistant'), findsWidgets);
     expect(find.text('Community Impact'), findsOneWidget);
   });
 }

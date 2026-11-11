@@ -7,7 +7,7 @@ import 'theme/app_theme.dart';
 import '../core/constants/app_constants.dart';
 import '../core/localization/app_locale.dart';
 import '../core/localization/app_localizations.dart';
-import '../data/services/mock_backend_store.dart';
+import '../core/localization/locale_provider.dart';
 
 class PadCareApp extends ConsumerStatefulWidget {
   const PadCareApp({super.key});
@@ -17,12 +17,10 @@ class PadCareApp extends ConsumerStatefulWidget {
 }
 
 class _PadCareAppState extends ConsumerState<PadCareApp> {
-  final MockBackendStore _store = MockBackendStore();
-
   @override
   Widget build(BuildContext context) {
-    final user = _store.currentUser;
-    final currentLocale = AppLocales.getLocale(user.selectedLocale);
+    final selectedLanguage = ref.watch(appLocaleProvider);
+    final currentLocale = AppLocales.getLocale(selectedLanguage.code);
 
     return MaterialApp.router(
       title: AppConstants.appName,

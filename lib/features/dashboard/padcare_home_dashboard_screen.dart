@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_elevation.dart';
@@ -6,6 +7,8 @@ import '../../app/theme/app_radius.dart';
 import '../../app/theme/app_theme.dart';
 import '../../app/theme/app_typography.dart';
 import '../../core/constants/asset_paths.dart';
+import '../../core/localization/app_localizations.dart';
+import '../../core/localization/locale_provider.dart';
 import '../../core/responsive/responsive_layout.dart';
 import '../../data/services/mock_backend_store.dart';
 import '../../shared/widgets/app_bottom_nav.dart';
@@ -13,17 +16,19 @@ import '../../shared/widgets/dignity_badge.dart';
 import '../../shared/widgets/dignity_button.dart';
 import '../../shared/widgets/dignity_card.dart';
 import '../../shared/widgets/dignity_chip.dart';
+import '../../shared/widgets/language_selector_sheet.dart';
+import '../../shared/widgets/voice_selector_sheet.dart';
 
-class PadCareHomeDashboardScreen extends StatefulWidget {
+class PadCareHomeDashboardScreen extends ConsumerStatefulWidget {
   const PadCareHomeDashboardScreen({super.key});
 
   @override
-  State<PadCareHomeDashboardScreen> createState() =>
+  ConsumerState<PadCareHomeDashboardScreen> createState() =>
       _PadCareHomeDashboardScreenState();
 }
 
 class _PadCareHomeDashboardScreenState
-    extends State<PadCareHomeDashboardScreen> {
+    extends ConsumerState<PadCareHomeDashboardScreen> {
   final MockBackendStore _store = MockBackendStore();
   String _selectedCategory = 'Sanitary Pads';
   final TextEditingController _searchController = TextEditingController();
@@ -54,7 +59,7 @@ class _PadCareHomeDashboardScreenState
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Color Profile & Theme', style: AppTypography.headlineSM()),
+                Text(context.tr('colorProfile'), style: AppTypography.headlineSM()),
                 IconButton(
                   icon: const Icon(Icons.close),
                   onPressed: () => Navigator.pop(ctx),
@@ -135,6 +140,8 @@ class _PadCareHomeDashboardScreenState
 
   @override
   Widget build(BuildContext context) {
+    final currentLang = ref.watch(appLocaleProvider);
+    final tts = ref.watch(ttsServiceProvider);
     final hubs = _store.hubs;
     final primaryHub = hubs.isNotEmpty ? hubs.first : null;
 
@@ -165,31 +172,81 @@ class _PadCareHomeDashboardScreenState
               ),
             ),
             const SizedBox(width: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('PadCare Uganda', style: AppTypography.labelLG()),
-                Row(
-                  children: [
-                    const Icon(Icons.location_on, size: 12, color: AppColors.primaryContainer),
-                    const SizedBox(width: 2),
-                    Text('Kampala, Central', style: AppTypography.labelSM(color: AppColors.neutralMuted)),
-                  ],
-                ),
-              ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(context.tr('appName'), style: AppTypography.labelLG()),
+                  Row(
+                    children: [
+                      const Icon(Icons.location_on, size: 12, color: AppColors.primaryContainer),
+                      const SizedBox(width: 2),
+                      Expanded(
+                        child: Text(
+                          'Kampala, Central',
+                          style: AppTypography.labelSM(color: AppColors.neutralMuted),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ],
         ),
         actions: [
+          // Text-to-Speech Speak Summary Action
+          IconButton(
+            icon: Icon(
+              tts.isPlaying ? Icons.stop_circle : Icons.volume_up_outlined,
+              color: tts.isPlaying ? AppColors.coralPink : AppColors.primaryContainer,
+            ),
+            tooltip: context.tr('listenWithVoice'),
+            onPressed: () {
+              if (tts.isPlaying) {
+                tts.stop();
+              } else {
+                final summary =
+                    '${context.tr('appName')}. ${context.tr('appTagline')}. ${context.tr('discreetPickup')}: ${context.tr('discreetPickupSub')}';
+                tts.speak(summary, languageCode: currentLang.code);
+              }
+            },
+          ),
+          // Language Switcher Action
+          IconButton(
+            icon: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.translate, size: 20),
+                const SizedBox(width: 2),
+                Text(
+                  currentLang.code.toUpperCase(),
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            tooltip: context.tr('selectLanguage'),
+            onPressed: () {
+              LanguageSelectorSheet.show(
+                context,
+                currentLocaleCode: currentLang.code,
+                onSelect: (lang) {
+                  ref.read(appLocaleProvider.notifier).setLanguage(lang);
+                },
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.palette_outlined),
-            tooltip: 'Color Profile',
+            tooltip: context.tr('theme'),
             onPressed: _showThemeDialog,
           ),
           Stack(
             children: [
               IconButton(
                 icon: const Icon(Icons.notifications_outlined),
+                tooltip: context.tr('notifications'),
                 onPressed: () => context.push('/notifications'),
               ),
               Positioned(
@@ -219,6 +276,51 @@ class _PadCareHomeDashboardScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // Active TTS Playback Banner
+                  if (tts.isLoading || tts.isPlaying)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: AppColors.secondaryContainer,
+                        borderRadius: AppRadius.mdBorder,
+                        border: Border.all(color: AppColors.primaryContainer.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          if (tts.isLoading)
+                            const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          else
+                            const Icon(Icons.record_voice_over, size: 18, color: AppColors.primaryContainer),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              tts.isLoading
+                                  ? 'Generating FreeAPI voice in ${currentLang.nativeName}...'
+                                  : '${context.tr('playingAudio')} (${tts.selectedVoice?.name ?? 'FreeAPI'})',
+                              style: AppTypography.labelSM(color: AppColors.primaryContainer),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.settings, size: 18, color: AppColors.primaryContainer),
+                            tooltip: context.tr('voiceSettings'),
+                            onPressed: () {
+                              VoiceSelectorSheet.show(context, currentLanguageCode: currentLang.code);
+                            },
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.stop, size: 18, color: AppColors.primaryContainer),
+                            tooltip: context.tr('stopAudio'),
+                            onPressed: tts.stop,
+                          ),
+                        ],
+                      ),
+                    ),
+
                   // Live Outreach Grid Search Bar
                   Container(
                     decoration: BoxDecoration(
@@ -238,8 +340,8 @@ class _PadCareHomeDashboardScreenState
                               Expanded(
                                 child: TextField(
                                   controller: _searchController,
-                                  decoration: const InputDecoration(
-                                    hintText: 'Search clinics, safe spaces, schools...',
+                                  decoration: InputDecoration(
+                                    hintText: context.tr('searchPlaceholder'),
                                     border: InputBorder.none,
                                     enabledBorder: InputBorder.none,
                                     focusedBorder: InputBorder.none,
@@ -253,6 +355,7 @@ class _PadCareHomeDashboardScreenState
                               ),
                               IconButton(
                                 icon: const Icon(Icons.mic_none, color: AppColors.primaryContainer),
+                                tooltip: context.tr('herHelpAssistant'),
                                 onPressed: () => context.push('/herhelp'),
                               ),
                             ],
@@ -299,7 +402,7 @@ class _PadCareHomeDashboardScreenState
                         final cat = _categories[index];
                         final isSelected = cat == _selectedCategory;
                         return DignityChip(
-                          label: cat,
+                          label: context.tr(cat),
                           isSelected: isSelected,
                           onTap: () => setState(() => _selectedCategory = cat),
                         );
@@ -317,10 +420,10 @@ class _PadCareHomeDashboardScreenState
                         children: [
                           Row(
                             children: [
-                              const DignityBadge(
-                                text: 'Discreet Pickup Guaranteed',
+                              DignityBadge(
+                                text: context.tr('discreetPickup'),
                                 variant: DignityBadgeVariant.confidential,
-                                icon: Icon(Icons.lock, size: 14, color: AppColors.primaryContainer),
+                                icon: const Icon(Icons.lock, size: 14, color: AppColors.primaryContainer),
                               ),
                               const Spacer(),
                               Text(
@@ -369,7 +472,7 @@ class _PadCareHomeDashboardScreenState
                                   ),
                                 ),
                                 DignityButton(
-                                  text: 'Get Code',
+                                  text: context.tr('getCode'),
                                   height: 36,
                                   padding: const EdgeInsets.symmetric(horizontal: 12),
                                   onPressed: () => context.push('/requests'),
@@ -384,7 +487,7 @@ class _PadCareHomeDashboardScreenState
                             children: [
                               Expanded(
                                 child: DignityButton(
-                                  text: 'View on Map',
+                                  text: context.tr('map'),
                                   style: DignityButtonStyle.secondary,
                                   icon: const Icon(Icons.map, size: 18, color: AppColors.primaryContainer),
                                   onPressed: () => context.push('/map'),
@@ -393,7 +496,7 @@ class _PadCareHomeDashboardScreenState
                               const SizedBox(width: 10),
                               Expanded(
                                 child: DignityButton(
-                                  text: 'Hub Details',
+                                  text: context.tr('directions'),
                                   style: DignityButtonStyle.outline,
                                   icon: const Icon(Icons.info_outline, size: 18, color: AppColors.primaryContainer),
                                   onPressed: () => context.push('/hub-details/${primaryHub.id}'),
@@ -440,12 +543,12 @@ class _PadCareHomeDashboardScreenState
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Chat with HerHelp AI',
+                                  context.tr('herHelpAssistant'),
                                   style: AppTypography.labelLG(color: Colors.white),
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  'Confidential advice, cramps relief & hub guides',
+                                  context.tr('herHelpSubtitle'),
                                   style: AppTypography.labelSM(color: Colors.white.withValues(alpha: 0.9)),
                                 ),
                               ],
@@ -464,14 +567,14 @@ class _PadCareHomeDashboardScreenState
                     children: [
                       Expanded(
                         child: Text(
-                          'Nearby Distribution Points',
+                          context.tr('nearbyHubs'),
                           style: AppTypography.headlineSM(color: AppColors.neutralDark),
                         ),
                       ),
                       TextButton(
                         onPressed: () => context.push('/map'),
                         child: Text(
-                          'Explore Hubs',
+                          context.tr('explore'),
                           style: AppTypography.labelMD(color: AppColors.primaryContainer),
                         ),
                       ),
@@ -501,37 +604,24 @@ class _PadCareHomeDashboardScreenState
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 14),
+                              const SizedBox(width: 12),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
                                       hub.name,
-                                      style: AppTypography.labelLG(color: AppColors.neutralDark),
+                                      style: AppTypography.labelMD(color: AppColors.neutralDark),
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
-                                      '${hub.walkingTimeMinutes} mins walk • ${hub.openHours}',
-                                      style: AppTypography.bodySM(color: AppColors.neutralMuted),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Row(
-                                      children: [
-                                        const Icon(Icons.star, size: 14, color: Color(0xFFF4B400)),
-                                        const SizedBox(width: 4),
-                                        Text('${hub.rating}', style: AppTypography.labelSM()),
-                                        const SizedBox(width: 10),
-                                        Text(
-                                          '${hub.stockDayPads} packs in stock',
-                                          style: AppTypography.labelSM(color: AppColors.success),
-                                        ),
-                                      ],
+                                      '${hub.distanceMeters}m • ${hub.walkingTimeMinutes} min walk',
+                                      style: AppTypography.labelSM(color: AppColors.neutralMuted),
                                     ),
                                   ],
                                 ),
                               ),
-                              const Icon(Icons.arrow_forward_ios, size: 14, color: AppColors.neutralMuted),
+                              const Icon(Icons.chevron_right, color: AppColors.neutralMuted),
                             ],
                           ),
                         ),
@@ -540,7 +630,7 @@ class _PadCareHomeDashboardScreenState
 
                   // Community Impact Card
                   DignityCard(
-                    backgroundColor: AppColors.surfaceContainerLow,
+                    backgroundColor: AppColors.surfaceContainerLowest,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -548,7 +638,7 @@ class _PadCareHomeDashboardScreenState
                           children: [
                             const Icon(Icons.volunteer_activism, color: AppColors.primaryContainer, size: 20),
                             const SizedBox(width: 8),
-                            Text('Community Impact', style: AppTypography.labelLG()),
+                            Text(context.tr('communityImpact'), style: AppTypography.labelLG()),
                           ],
                         ),
                         const SizedBox(height: 12),
@@ -557,7 +647,7 @@ class _PadCareHomeDashboardScreenState
                           children: [
                             _buildImpactStat('10,420+', 'Packs Given'),
                             _buildImpactStat('450+', 'Active Hubs'),
-                            _buildImpactStat('100%', 'Free Access'),
+                            _buildImpactStat('100%', context.tr('free')),
                           ],
                         ),
                       ],

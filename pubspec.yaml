@@ -23,8 +23,14 @@ dependencies:
   uuid: ^4.6.0
   connectivity_plus: ^7.3.2
   crypto: ^3.0.3
+  audioplayers: ^6.8.1
   google_maps_flutter: ^2.19.0
   google_maps_flutter_web: ^0.6.5
+  supabase_flutter: ^2.18.3
+  flutter_map: ^8.3.2
+  latlong2: ^0.10.1
+  geolocator: ^14.0.1
+  google_generative_ai: ^0.4.7
 
 dev_dependencies:
   flutter_test:

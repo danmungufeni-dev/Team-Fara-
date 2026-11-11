@@ -3,6 +3,7 @@ import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_radius.dart';
 import '../../app/theme/app_typography.dart';
 import '../../core/localization/app_locale.dart';
+import '../../core/localization/app_localizations.dart';
 
 class LanguageSelectorSheet extends StatelessWidget {
   final String currentLocaleCode;
@@ -63,7 +64,7 @@ class LanguageSelectorSheet extends StatelessWidget {
                     const Icon(Icons.translate, color: AppColors.primaryContainer),
                     const SizedBox(width: 8),
                     Text(
-                      'Select Language',
+                      context.tr('selectLanguage'),
                       style: AppTypography.headlineSM(),
                     ),
                   ],

@@ -1,10 +1,16 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:go_router/go_router.dart';
+import 'package:latlong2/latlong.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_elevation.dart';
 import '../../app/theme/app_radius.dart';
 import '../../app/theme/app_typography.dart';
+import '../../core/localization/app_localizations.dart';
 import '../../core/responsive/responsive_layout.dart';
+import '../../core/services/location_service.dart';
+import '../../core/services/supabase_service.dart';
 import '../../data/models/distribution_point.dart';
 import '../../data/services/mock_backend_store.dart';
 import '../../shared/widgets/app_bottom_nav.dart';
@@ -22,13 +28,29 @@ class LiveMapDiscoveryScreen extends StatefulWidget {
   State<LiveMapDiscoveryScreen> createState() => _LiveMapDiscoveryScreenState();
 }
 
-class _LiveMapDiscoveryScreenState extends State<LiveMapDiscoveryScreen> {
+class _LiveMapDiscoveryScreenState extends State<LiveMapDiscoveryScreen>
+    with SingleTickerProviderStateMixin {
   final MockBackendStore _store = MockBackendStore();
+  final LocationService _locationService = LocationService.instance;
+  final SupabaseService _supabaseService = SupabaseService.instance;
+
+  final MapController _mapController = MapController();
+  final TextEditingController _searchController = TextEditingController();
+
+  StreamSubscription<LatLng>? _locationSubscription;
+  StreamSubscription<List<DistributionPoint>>? _hubsSubscription;
+
+  LatLng _userLocation = LocationService.defaultKampala;
+  List<DistributionPoint> _liveHubs = [];
+  DistributionPoint? _selectedHub;
+
   bool _isMapView = true;
+  bool _followUser = true;
   String _selectedCity = 'Kampala';
   String _activeFilter = 'Available Now';
-  DistributionPoint? _selectedHub;
-  final TextEditingController _searchController = TextEditingController();
+
+  late AnimationController _pulseController;
+  late Animation<double> _pulseAnimation;
 
   final List<Map<String, String>> _eacCities = const [
     {'flag': '🇺🇬', 'city': 'Kampala'},
@@ -50,23 +72,115 @@ class _LiveMapDiscoveryScreenState extends State<LiveMapDiscoveryScreen> {
   @override
   void initState() {
     super.initState();
+
+    _liveHubs = List.from(_store.hubs);
+    if (_liveHubs.isNotEmpty) {
+      _selectedHub = _liveHubs.first;
+    }
+
     if (widget.initialQuery != null) {
       _searchController.text = widget.initialQuery!;
     }
-    if (_store.hubs.isNotEmpty) {
-      _selectedHub = _store.hubs.first;
-    }
+
+    // Pulse animation for user's realtime location radar
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat();
+    _pulseAnimation = Tween<double>(begin: 8.0, end: 28.0).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeOut),
+    );
+
+    _initRealtimeTracking();
+  }
+
+  void _initRealtimeTracking() {
+    // 1. Realtime Hubs stream from Supabase/Backend
+    _hubsSubscription = _supabaseService.streamDistributionPoints().listen((hubs) {
+      if (mounted) {
+        setState(() {
+          _liveHubs = hubs;
+          if (_selectedHub != null) {
+            _selectedHub = hubs.firstWhere(
+              (h) => h.id == _selectedHub!.id,
+              orElse: () => hubs.first,
+            );
+          }
+        });
+      }
+    });
+
+    // 2. Realtime user location tracking
+    _locationSubscription = _locationService.getRealtimeLocationStream().listen((coords) {
+      if (mounted) {
+        setState(() {
+          _userLocation = coords;
+        });
+
+        if (_followUser) {
+          _mapController.move(coords, _mapController.camera.zoom);
+        }
+      }
+    });
   }
 
   @override
   void dispose() {
+    _pulseController.dispose();
+    _locationSubscription?.cancel();
+    _hubsSubscription?.cancel();
     _searchController.dispose();
     super.dispose();
   }
 
+  void _moveToCity(String city) {
+    setState(() => _selectedCity = city);
+    final coords = LocationService.eacCityCoordinates[city];
+    if (coords != null) {
+      _mapController.move(coords, 13.5);
+    }
+  }
+
+  void _recenterOnUser() {
+    setState(() => _followUser = true);
+    _mapController.move(_userLocation, 15.0);
+  }
+
+  List<DistributionPoint> _getFilteredHubs() {
+    List<DistributionPoint> list = _liveHubs.isNotEmpty ? _liveHubs : _store.hubs;
+
+    // Filter by city if not EAC Cross-Border
+    if (_activeFilter != 'EAC Cross-Border') {
+      list = list.where((h) => h.city.toLowerCase() == _selectedCity.toLowerCase()).toList();
+      if (list.isEmpty) {
+        // Fallback to all if selected city has no hubs registered yet
+        list = _liveHubs.isNotEmpty ? _liveHubs : _store.hubs;
+      }
+    }
+
+    // Filter by active pill
+    if (_activeFilter == 'Available Now') {
+      list = list.where((h) => h.isAvailable).toList();
+    } else if (_activeFilter == 'Gov & NGO Verified') {
+      list = list.where((h) => h.isVerified).toList();
+    }
+
+    // Search query filter
+    final q = _searchController.text.trim().toLowerCase();
+    if (q.isNotEmpty) {
+      list = list.where((h) {
+        return h.name.toLowerCase().contains(q) ||
+            h.category.toLowerCase().contains(q) ||
+            h.address.toLowerCase().contains(q);
+      }).toList();
+    }
+
+    return list;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final hubs = _store.hubs;
+    final filteredHubs = _getFilteredHubs();
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -78,11 +192,74 @@ class _LiveMapDiscoveryScreenState extends State<LiveMapDiscoveryScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Live Map Discovery', style: AppTypography.headlineSM()),
-            Text('Kampala • EAC Corridor', style: AppTypography.labelSM(color: AppColors.neutralMuted)),
+            Row(
+              children: [
+                Text(context.tr('liveMapTitle'), style: AppTypography.headlineSM()),
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: _supabaseService.isLiveSupabase
+                        ? AppColors.success.withValues(alpha: 0.15)
+                        : AppColors.secondaryContainer,
+                    borderRadius: AppRadius.fullBorder,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.bolt,
+                        size: 11,
+                        color: _supabaseService.isLiveSupabase
+                            ? AppColors.success
+                            : AppColors.primaryContainer,
+                      ),
+                      const SizedBox(width: 2),
+                      Text(
+                        _supabaseService.isLiveSupabase ? 'Supabase Realtime' : 'Realtime GPS',
+                        style: AppTypography.labelSM(
+                          color: _supabaseService.isLiveSupabase
+                              ? AppColors.success
+                              : AppColors.primaryContainer,
+                        ).copyWith(fontSize: 10),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            Text(
+              '$_selectedCity • Live GPS & Hub Coordinates',
+              style: AppTypography.labelSM(color: AppColors.neutralMuted),
+            ),
           ],
         ),
         actions: [
+          // Simulated movement toggle for testing
+          IconButton(
+            icon: Icon(
+              _locationService.isSimulating ? Icons.directions_walk : Icons.gps_fixed,
+              color: _locationService.isSimulating ? AppColors.coralPink : AppColors.neutralDark,
+            ),
+            tooltip: _locationService.isSimulating
+                ? 'Stop Movement Simulation'
+                : 'Simulate Walking Movement',
+            onPressed: () {
+              setState(() {
+                _locationService.toggleSimulation();
+              });
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    _locationService.isSimulating
+                        ? 'Realtime walking simulation started along Kampala route!'
+                        : 'Switched back to device hardware GPS.',
+                  ),
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.add_location_alt_outlined),
             tooltip: 'Add Hub',
@@ -122,8 +299,8 @@ class _LiveMapDiscoveryScreenState extends State<LiveMapDiscoveryScreen> {
                                 Expanded(
                                   child: TextField(
                                     controller: _searchController,
-                                    decoration: const InputDecoration(
-                                      hintText: 'Search hubs or areas...',
+                                    decoration: InputDecoration(
+                                      hintText: context.tr('searchPlaceholder'),
                                       border: InputBorder.none,
                                       enabledBorder: InputBorder.none,
                                       focusedBorder: InputBorder.none,
@@ -133,6 +310,14 @@ class _LiveMapDiscoveryScreenState extends State<LiveMapDiscoveryScreen> {
                                     onChanged: (val) => setState(() {}),
                                   ),
                                 ),
+                                if (_searchController.text.isNotEmpty)
+                                  IconButton(
+                                    icon: const Icon(Icons.clear, size: 18),
+                                    onPressed: () {
+                                      _searchController.clear();
+                                      setState(() {});
+                                    },
+                                  ),
                               ],
                             ),
                           ),
@@ -151,14 +336,18 @@ class _LiveMapDiscoveryScreenState extends State<LiveMapDiscoveryScreen> {
                               IconButton(
                                 icon: Icon(
                                   Icons.map,
-                                  color: _isMapView ? AppColors.primaryContainer : AppColors.neutralMuted,
+                                  color: _isMapView
+                                      ? AppColors.primaryContainer
+                                      : AppColors.neutralMuted,
                                 ),
                                 onPressed: () => setState(() => _isMapView = true),
                               ),
                               IconButton(
                                 icon: Icon(
                                   Icons.format_list_bulleted,
-                                  color: !_isMapView ? AppColors.primaryContainer : AppColors.neutralMuted,
+                                  color: !_isMapView
+                                      ? AppColors.primaryContainer
+                                      : AppColors.neutralMuted,
                                 ),
                                 onPressed: () => setState(() => _isMapView = false),
                               ),
@@ -183,7 +372,7 @@ class _LiveMapDiscoveryScreenState extends State<LiveMapDiscoveryScreen> {
                         return DignityChip(
                           label: '${item['flag']} ${item['city']}',
                           isSelected: isSelected,
-                          onTap: () => setState(() => _selectedCity = item['city']!),
+                          onTap: () => _moveToCity(item['city']!),
                         );
                       },
                     ),
@@ -207,11 +396,13 @@ class _LiveMapDiscoveryScreenState extends State<LiveMapDiscoveryScreen> {
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                             decoration: BoxDecoration(
-                              color: isSelected ? AppColors.primaryContainer : AppColors.surfaceContainerHigh,
+                              color: isSelected
+                                  ? AppColors.primaryContainer
+                                  : AppColors.surfaceContainerHigh,
                               borderRadius: AppRadius.fullBorder,
                             ),
                             child: Text(
-                              filter,
+                              context.tr(filter),
                               style: AppTypography.labelSM(
                                 color: isSelected ? Colors.white : AppColors.neutralDark,
                               ),
@@ -223,11 +414,11 @@ class _LiveMapDiscoveryScreenState extends State<LiveMapDiscoveryScreen> {
                   ),
                   const SizedBox(height: 8),
 
-                  // Main View: Map or List
+                  // Main View: Realtime OpenStreetMap or List View
                   Expanded(
                     child: _isMapView
-                        ? _buildInteractiveMap(hubs)
-                        : _buildListView(hubs),
+                        ? _buildInteractiveOsmMap(filteredHubs)
+                        : _buildListView(filteredHubs),
                   ),
                 ],
               ),
@@ -238,53 +429,53 @@ class _LiveMapDiscoveryScreenState extends State<LiveMapDiscoveryScreen> {
                   left: 16,
                   right: 16,
                   bottom: 16,
-                  child: DignityCard(
-                    boxShadow: AppElevation.level3,
-                    onTap: () => context.push('/hub-details/${_selectedHub!.id}'),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          children: [
-                            const DignityBadge(
-                              text: 'Verified MOH Hub',
-                              variant: DignityBadgeVariant.verified,
-                            ),
-                            const Spacer(),
-                            Text(
-                              '${_selectedHub!.walkingTimeMinutes} mins walk',
-                              style: AppTypography.labelSM(color: AppColors.neutralMuted),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          _selectedHub!.name,
-                          style: AppTypography.labelLG(color: AppColors.neutralDark),
-                        ),
-                        Text(
-                          _selectedHub!.address,
-                          style: AppTypography.bodySM(color: AppColors.neutralMuted),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Text(
-                              '${_selectedHub!.stockDayPads} Day Pads in stock',
-                              style: AppTypography.labelSM(color: AppColors.success),
-                            ),
-                            const Spacer(),
-                            DignityButton(
-                              text: 'Reserve Pack',
-                              height: 38,
-                              padding: const EdgeInsets.symmetric(horizontal: 14),
-                              onPressed: () => context.push('/requests'),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
+                  child: _buildSelectedHubCard(_selectedHub!),
+                ),
+
+              // Map Floating Action Controls (Recenter, Zoom, Simulation indicator)
+              if (_isMapView)
+                Positioned(
+                  right: 16,
+                  top: 150,
+                  child: Column(
+                    children: [
+                      FloatingActionButton.small(
+                        heroTag: 'recenter_gps',
+                        backgroundColor: Colors.white,
+                        foregroundColor: AppColors.primaryContainer,
+                        tooltip: 'Recenter on My Location',
+                        onPressed: _recenterOnUser,
+                        child: const Icon(Icons.my_location),
+                      ),
+                      const SizedBox(height: 8),
+                      FloatingActionButton.small(
+                        heroTag: 'zoom_in',
+                        backgroundColor: Colors.white,
+                        foregroundColor: AppColors.neutralDark,
+                        tooltip: 'Zoom In',
+                        onPressed: () {
+                          _mapController.move(
+                            _mapController.camera.center,
+                            _mapController.camera.zoom + 1,
+                          );
+                        },
+                        child: const Icon(Icons.add),
+                      ),
+                      const SizedBox(height: 8),
+                      FloatingActionButton.small(
+                        heroTag: 'zoom_out',
+                        backgroundColor: Colors.white,
+                        foregroundColor: AppColors.neutralDark,
+                        tooltip: 'Zoom Out',
+                        onPressed: () {
+                          _mapController.move(
+                            _mapController.camera.center,
+                            _mapController.camera.zoom - 1,
+                          );
+                        },
+                        child: const Icon(Icons.remove),
+                      ),
+                    ],
                   ),
                 ),
             ],
@@ -315,88 +506,233 @@ class _LiveMapDiscoveryScreenState extends State<LiveMapDiscoveryScreen> {
     );
   }
 
-  Widget _buildInteractiveMap(List<DistributionPoint> hubs) {
-    return Container(
-      color: const Color(0xFFE5E3DF),
-      child: Stack(
-        children: [
-          // Simulated Map Grid with subtle roads and terrain
-          CustomPaint(
-            size: Size.infinite,
-            painter: _MapCanvasPainter(),
+  Widget _buildInteractiveOsmMap(List<DistributionPoint> hubs) {
+    // Generate route polyline between user and selected hub
+    final List<LatLng> routePoints = [];
+    if (_selectedHub != null) {
+      routePoints.add(_userLocation);
+      // Realistic intermediate waypoint for demonstration
+      final midLat = (_userLocation.latitude + _selectedHub!.latitude) / 2;
+      final midLng = (_userLocation.longitude + _selectedHub!.longitude) / 2;
+      routePoints.add(LatLng(midLat, midLng));
+      routePoints.add(LatLng(_selectedHub!.latitude, _selectedHub!.longitude));
+    }
+
+    return FlutterMap(
+      mapController: _mapController,
+      options: MapOptions(
+        initialCenter: _userLocation,
+        initialZoom: 14.5,
+        onPositionChanged: (pos, hasGesture) {
+          if (hasGesture && _followUser) {
+            setState(() => _followUser = false);
+          }
+        },
+      ),
+      children: [
+        // Free, Worldwide OpenStreetMap Tile Layer
+        TileLayer(
+          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+          userAgentPackageName: 'org.padcare.app',
+          maxZoom: 19,
+        ),
+
+        // Walking route polyline to selected hub
+        if (routePoints.length >= 2)
+          PolylineLayer(
+            polylines: [
+              Polyline(
+                points: routePoints,
+                strokeWidth: 4.5,
+                color: AppColors.primaryContainer,
+                borderColor: Colors.white,
+                borderStrokeWidth: 2.0,
+              ),
+            ],
           ),
 
-          // User Current Location Marker
-          Positioned(
-            left: 120,
-            top: 220,
-            child: Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: AppRadius.fullBorder,
-                    boxShadow: AppElevation.level1,
-                  ),
-                  child: Text('You are here (Wandegeya)', style: AppTypography.labelSM()),
-                ),
-                const SizedBox(height: 4),
-                Container(
-                  width: 22,
-                  height: 22,
-                  decoration: BoxDecoration(
-                    color: Colors.blueAccent,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 3),
-                    boxShadow: AppElevation.level2,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Distribution Point Markers
-          for (int i = 0; i < hubs.length; i++)
-            Positioned(
-              left: 60.0 + (i * 90.0) % 240,
-              top: 100.0 + (i * 110.0) % 280,
-              child: GestureDetector(
-                onTap: () {
-                  setState(() => _selectedHub = hubs[i]);
-                },
-                child: Column(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: _selectedHub?.id == hubs[i].id
-                            ? AppColors.primaryContainer
-                            : Colors.white,
-                        borderRadius: AppRadius.fullBorder,
-                        boxShadow: AppElevation.level1,
-                      ),
-                      child: Text(
-                        hubs[i].name.split(' ').first,
-                        style: AppTypography.labelSM(
-                          color: _selectedHub?.id == hubs[i].id
-                              ? Colors.white
-                              : AppColors.neutralDark,
+        // Hub Markers and Realtime User Location Marker
+        MarkerLayer(
+          markers: [
+            // User Realtime GPS Marker with Animated Radar Pulse
+            Marker(
+              point: _userLocation,
+              width: 70,
+              height: 70,
+              child: AnimatedBuilder(
+                animation: _pulseAnimation,
+                builder: (context, child) {
+                  return Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      // Pulsing radar wave
+                      Container(
+                        width: _pulseAnimation.value * 2,
+                        height: _pulseAnimation.value * 2,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.blueAccent.withValues(
+                            alpha: (1.0 - (_pulseController.value)).clamp(0.0, 0.5),
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 2),
-                    Icon(
-                      Icons.location_on,
-                      size: 38,
-                      color: _selectedHub?.id == hubs[i].id
-                          ? AppColors.coralPink
-                          : AppColors.primaryContainer,
+                      // Core location dot
+                      Container(
+                        width: 18,
+                        height: 18,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E88E5),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 3),
+                          boxShadow: AppElevation.level2,
+                        ),
+                      ),
+                      // Heading arrow indicator
+                      const Positioned(
+                        top: 14,
+                        child: Icon(
+                          Icons.navigation,
+                          size: 12,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+
+            // Distribution Points Markers
+            for (final hub in hubs)
+              Marker(
+                point: LatLng(hub.latitude, hub.longitude),
+                width: 110,
+                height: 65,
+                child: GestureDetector(
+                  onTap: () {
+                    setState(() => _selectedHub = hub);
+                  },
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: _selectedHub?.id == hub.id
+                              ? AppColors.primaryContainer
+                              : Colors.white,
+                          borderRadius: AppRadius.fullBorder,
+                          border: Border.all(
+                            color: _selectedHub?.id == hub.id
+                                ? Colors.white
+                                : AppColors.primaryContainer,
+                            width: 1.5,
+                          ),
+                          boxShadow: AppElevation.level2,
+                        ),
+                        child: Text(
+                          hub.name.split(' ').first,
+                          style: AppTypography.labelSM(
+                            color: _selectedHub?.id == hub.id
+                                ? Colors.white
+                                : AppColors.neutralDark,
+                          ).copyWith(fontSize: 11, fontWeight: FontWeight.bold),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Icon(
+                        Icons.location_on,
+                        size: 36,
+                        color: _selectedHub?.id == hub.id
+                            ? AppColors.coralPink
+                            : AppColors.primaryContainer,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSelectedHubCard(DistributionPoint hub) {
+    // Calculate live distance & walking time from current user GPS coordinates
+    final hubLatLng = LatLng(hub.latitude, hub.longitude);
+    final distanceMeters = _locationService.calculateDistanceMeters(_userLocation, hubLatLng);
+    final distanceText = _locationService.formatDistance(distanceMeters);
+    final walkingMinutes = _locationService.estimateWalkingMinutes(distanceMeters);
+
+    return DignityCard(
+      boxShadow: AppElevation.level3,
+      onTap: () => context.push('/hub-details/${hub.id}'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              const DignityBadge(
+                text: 'Verified Safe Hub',
+                variant: DignityBadgeVariant.verified,
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.secondaryContainer,
+                  borderRadius: AppRadius.fullBorder,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.directions_walk, size: 14, color: AppColors.primaryContainer),
+                    const SizedBox(width: 4),
+                    Text(
+                      '$distanceText • $walkingMinutes mins walk',
+                      style: AppTypography.labelSM(color: AppColors.primaryContainer)
+                          .copyWith(fontWeight: FontWeight.w600),
                     ),
                   ],
                 ),
               ),
-            ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            hub.name,
+            style: AppTypography.labelLG(color: AppColors.neutralDark),
+          ),
+          Text(
+            hub.address,
+            style: AppTypography.bodySM(color: AppColors.neutralMuted),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(
+                  color: AppColors.success,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '${hub.stockDayPads} Day Pads in stock',
+                style: AppTypography.labelSM(color: AppColors.success),
+              ),
+              const Spacer(),
+              DignityButton(
+                text: context.tr('reservePack'),
+                height: 38,
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                onPressed: () => context.push('/requests'),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -409,6 +745,11 @@ class _LiveMapDiscoveryScreenState extends State<LiveMapDiscoveryScreen> {
       separatorBuilder: (context, index) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final hub = hubs[index];
+        final hubLatLng = LatLng(hub.latitude, hub.longitude);
+        final distanceMeters =
+            _locationService.calculateDistanceMeters(_userLocation, hubLatLng);
+        final distanceText = _locationService.formatDistance(distanceMeters);
+
         return DignityCard(
           onTap: () => context.push('/hub-details/${hub.id}'),
           child: Column(
@@ -417,8 +758,18 @@ class _LiveMapDiscoveryScreenState extends State<LiveMapDiscoveryScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(hub.name, style: AppTypography.labelLG()),
-                  Text('${hub.distanceMeters.toInt()}m', style: AppTypography.labelSM()),
+                  Expanded(
+                    child: Text(
+                      hub.name,
+                      style: AppTypography.labelLG(),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Text(
+                    distanceText,
+                    style: AppTypography.labelSM(color: AppColors.primaryContainer)
+                        .copyWith(fontWeight: FontWeight.bold),
+                  ),
                 ],
               ),
               const SizedBox(height: 4),
@@ -430,9 +781,11 @@ class _LiveMapDiscoveryScreenState extends State<LiveMapDiscoveryScreen> {
                   const SizedBox(width: 4),
                   Text('${hub.rating}', style: AppTypography.labelSM()),
                   const SizedBox(width: 12),
-                  Text('${hub.stockDayPads} packs', style: AppTypography.labelSM(color: AppColors.success)),
+                  Text('${hub.stockDayPads} packs',
+                      style: AppTypography.labelSM(color: AppColors.success)),
                   const Spacer(),
-                  Text(hub.openHours, style: AppTypography.labelSM(color: AppColors.neutralMuted)),
+                  Text(hub.openHours,
+                      style: AppTypography.labelSM(color: AppColors.neutralMuted)),
                 ],
               ),
             ],
@@ -441,35 +794,4 @@ class _LiveMapDiscoveryScreenState extends State<LiveMapDiscoveryScreen> {
       },
     );
   }
-}
-
-class _MapCanvasPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final roadPaint = Paint()
-      ..color = const Color(0xFFD6D2CA)
-      ..strokeWidth = 14
-      ..style = PaintingStyle.stroke;
-
-    final roadMinorPaint = Paint()
-      ..color = const Color(0xFFFFFFFF)
-      ..strokeWidth = 6
-      ..style = PaintingStyle.stroke;
-
-    // Draw main arterial road
-    final path = Path()
-      ..moveTo(0, size.height * 0.4)
-      ..quadraticBezierTo(size.width * 0.5, size.height * 0.45, size.width, size.height * 0.2);
-    canvas.drawPath(path, roadPaint);
-    canvas.drawPath(path, roadMinorPaint);
-
-    final path2 = Path()
-      ..moveTo(size.width * 0.3, 0)
-      ..quadraticBezierTo(size.width * 0.45, size.height * 0.6, size.width * 0.7, size.height);
-    canvas.drawPath(path2, roadPaint);
-    canvas.drawPath(path2, roadMinorPaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

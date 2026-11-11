@@ -1,10 +1,12 @@
 import '../models/user_profile.dart';
 import '../services/mock_backend_store.dart';
+import '../../core/services/supabase_service.dart';
 import '../../core/storage/secure_storage.dart';
 
 abstract class IAuthRepository {
   Future<UserProfile> getCurrentUser();
   Future<UserProfile> signInWithEmail(String email, String password, {String? pseudonym});
+  Future<UserProfile> signInAnonymously({String? pseudonym});
   Future<UserProfile> signInWithGoogle();
   Future<bool> verifyOtp(String code);
   Future<void> acceptTerms();
@@ -17,11 +19,12 @@ abstract class IAuthRepository {
 }
 
 class AuthRepository implements IAuthRepository {
+  final SupabaseService _supabase = SupabaseService.instance;
   final MockBackendStore _store = MockBackendStore();
 
   @override
   Future<UserProfile> getCurrentUser() async {
-    return _store.currentUser;
+    return _supabase.currentUser;
   }
 
   @override
@@ -30,12 +33,15 @@ class AuthRepository implements IAuthRepository {
     String password, {
     String? pseudonym,
   }) async {
-    await SecureStorage.writeToken('auth_token', 'mock_jwt_token_${DateTime.now().millisecondsSinceEpoch}');
-    _store.currentUser = _store.currentUser.copyWith(
+    return await _supabase.signInWithEmail(
       email: email,
-      pseudonym: pseudonym ?? _store.currentUser.pseudonym,
+      password: password,
     );
-    return _store.currentUser;
+  }
+
+  @override
+  Future<UserProfile> signInAnonymously({String? pseudonym}) async {
+    return await _supabase.signInAnonymously(pseudonym: pseudonym);
   }
 
   @override
@@ -76,11 +82,12 @@ class AuthRepository implements IAuthRepository {
 
   @override
   Future<void> signOut() async {
-    await SecureStorage.deleteToken('auth_token');
+    await _supabase.signOut();
   }
 
   @override
   Future<void> emergencyWipe() async {
+    await _supabase.signOut();
     await SecureStorage.wipeAllSensitive();
     _store.messages.clear();
     _store.notifications.clear();

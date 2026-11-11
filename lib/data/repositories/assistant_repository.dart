@@ -1,9 +1,12 @@
+import '../../core/services/gemini_service.dart';
+
 class AssistantMessage {
   final String id;
   final String content;
   final bool isUser;
   final DateTime timestamp;
   final List<String>? actionChips;
+  final bool isLiveAi;
 
   const AssistantMessage({
     required this.id,
@@ -11,6 +14,7 @@ class AssistantMessage {
     required this.isUser,
     required this.timestamp,
     this.actionChips,
+    this.isLiveAi = false,
   });
 }
 
@@ -18,15 +22,21 @@ abstract class IAssistantRepository {
   Future<List<AssistantMessage>> getConversation();
   Future<AssistantMessage> askAssistant(String question);
   Future<void> clearSession();
+  bool get hasGeminiApiKey;
+  Future<void> setGeminiApiKey(String apiKey);
 }
 
 class AssistantRepository implements IAssistantRepository {
+  final GeminiService _gemini = GeminiService.instance;
+
   final List<AssistantMessage> _messages = [
     AssistantMessage(
       id: 'init_1',
-      content: 'Hello, I am HerHelp, your safe and confidential PadCare companion. Everything discussed in this session is completely private, unlogged, and wiped when you exit.\n\nHow can I support your menstrual health and dignity today?',
+      content:
+          'Hello, I am HerHelp, your safe and confidential PadCare companion powered by Google Gemini. Everything discussed here is completely private, unlogged, and wiped when you exit.\n\nHow can I support your menstrual health and dignity today?',
       isUser: false,
       timestamp: DateTime.now().subtract(const Duration(minutes: 5)),
+      isLiveAi: false,
       actionChips: const [
         'Request free pads discreetly',
         'Severe cramps relief remedies',
@@ -35,6 +45,14 @@ class AssistantRepository implements IAssistantRepository {
       ],
     ),
   ];
+
+  @override
+  bool get hasGeminiApiKey => _gemini.hasApiKey;
+
+  @override
+  Future<void> setGeminiApiKey(String apiKey) async {
+    await _gemini.setApiKey(apiKey);
+  }
 
   @override
   Future<List<AssistantMessage>> getConversation() async {
@@ -51,27 +69,27 @@ class AssistantRepository implements IAssistantRepository {
     );
     _messages.add(userMsg);
 
-    // Contextual dignity-first response
-    String reply = '';
-    final q = question.toLowerCase();
+    // Build context history for multi-turn Gemini conversation
+    final history = _messages
+        .where((m) => m.id != userMsg.id && !m.id.startsWith('init'))
+        .map((m) => {
+              'role': m.isUser ? 'user' : 'model',
+              'text': m.content,
+            })
+        .toList();
 
-    if (q.contains('pad') || q.contains('request') || q.contains('free')) {
-      reply = 'You can reserve free sanitary pads completely discreetly. No ID, phone number or name will be requested at the center. Once you tap "Get Code", you receive a 6-character voucher (e.g. PAD-749) sealed in an opaque kraft bag.';
-    } else if (q.contains('cramp') || q.contains('pain') || q.contains('relief')) {
-      reply = 'For menstrual cramp discomfort, helpful non-medical relief includes:\n• Applying gentle warmth (warm water compress or bottle) to your lower abdomen\n• Staying hydrated with warm water or herbal tea\n• Gentle walking and light stretching\n\n⚠️ Note: If your pain is unusually severe, sudden, or accompanied by dizziness or heavy bleeding, please speak with a registered healthcare provider or visit your nearest primary health center.';
-    } else if (q.contains('hub') || q.contains('find') || q.contains('where')) {
-      reply = 'There are multiple verified safe collection hubs near you in Kampala, including Kisenyi Health Center IV (850m away) and WoMena Community Sanctuary (1.4km). Both have verified female caretakers on duty and private counters.';
-    } else if (q.contains('anonymous') || q.contains('pickup') || q.contains('work')) {
-      reply = 'Anonymous pickup is simple:\n1. Choose a nearby hub on the map or home screen\n2. Tap "Reserve Discreet Pack"\n3. Note your confidential 6-digit code (e.g. PAD-749)\n4. Walk to the dispensary counter and whisper or show the code\n5. Collect your sealed, unlabelled kraft bag.';
-    } else {
-      reply = 'Thank you for reaching out. PadCare is here to support you with free menstrual products, private guidance, and verified safe spaces across Uganda. If you have medical concerns, please consult a qualified healthcare worker.';
-    }
+    final geminiRes = await _gemini.askHerHelp(
+      question: question,
+      conversationHistory: history,
+    );
 
     final botMsg = AssistantMessage(
       id: 'bot_${DateTime.now().millisecondsSinceEpoch}',
-      content: reply,
+      content: geminiRes.text,
       isUser: false,
       timestamp: DateTime.now(),
+      actionChips: geminiRes.suggestedChips,
+      isLiveAi: geminiRes.isLiveAi,
     );
     _messages.add(botMsg);
     return botMsg;
@@ -83,9 +101,11 @@ class AssistantRepository implements IAssistantRepository {
     _messages.add(
       AssistantMessage(
         id: 'init_${DateTime.now().millisecondsSinceEpoch}',
-        content: 'New zero-trace session started. All previous messages were wiped from memory.',
+        content:
+            'New zero-trace session started. All previous messages were wiped from memory.',
         isUser: false,
         timestamp: DateTime.now(),
+        isLiveAi: false,
         actionChips: const [
           'Request free pads discreetly',
           'Severe cramps relief remedies',

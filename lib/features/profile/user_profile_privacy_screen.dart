@@ -1,25 +1,34 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../app/theme/app_colors.dart';
+import '../../app/theme/app_radius.dart';
 import '../../app/theme/app_typography.dart';
-import '../../core/localization/app_locale.dart';
+import '../../core/constants/app_constants.dart';
+import '../../core/localization/app_localizations.dart';
+import '../../core/localization/locale_provider.dart';
 import '../../core/responsive/responsive_layout.dart';
+import '../../core/services/gemini_service.dart';
+import '../../core/services/supabase_service.dart';
+import '../../core/storage/local_storage.dart';
 import '../../data/services/mock_backend_store.dart';
 import '../../shared/widgets/app_bottom_nav.dart';
 import '../../shared/widgets/dignity_button.dart';
 import '../../shared/widgets/dignity_card.dart';
 import '../../shared/widgets/discreet_camouflage_view.dart';
 import '../../shared/widgets/language_selector_sheet.dart';
+import '../../shared/widgets/voice_selector_sheet.dart';
 
-class UserProfilePrivacyScreen extends StatefulWidget {
+class UserProfilePrivacyScreen extends ConsumerStatefulWidget {
   const UserProfilePrivacyScreen({super.key});
 
   @override
-  State<UserProfilePrivacyScreen> createState() =>
+  ConsumerState<UserProfilePrivacyScreen> createState() =>
       _UserProfilePrivacyScreenState();
 }
 
-class _UserProfilePrivacyScreenState extends State<UserProfilePrivacyScreen> {
+class _UserProfilePrivacyScreenState
+    extends ConsumerState<UserProfilePrivacyScreen> {
   final MockBackendStore _store = MockBackendStore();
   bool _isCamouflage = false;
 
@@ -28,15 +37,13 @@ class _UserProfilePrivacyScreenState extends State<UserProfilePrivacyScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Row(
-          children: const [
-            Icon(Icons.warning_amber_rounded, color: AppColors.error),
-            SizedBox(width: 8),
-            Text('Emergency Data Reset'),
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: AppColors.error),
+            const SizedBox(width: 8),
+            Text(context.tr('emergencyReset')),
           ],
         ),
-        content: const Text(
-          'This will instantly destroy all local voucher codes, message logs, and cached search history from this device. Are you sure?',
-        ),
+        content: Text(context.tr('emergencyResetSub')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -63,6 +70,250 @@ class _UserProfilePrivacyScreenState extends State<UserProfilePrivacyScreen> {
     );
   }
 
+  void _showSupabaseConfigSheet() {
+    final urlController = TextEditingController(
+      text: LocalStorage.getString(AppConstants.storageKeySupabaseUrl) ?? '',
+    );
+    final keyController = TextEditingController(
+      text: LocalStorage.getString(AppConstants.storageKeySupabaseAnonKey) ?? '',
+    );
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(ctx).viewInsets.bottom,
+        ),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.secondaryContainer,
+                      borderRadius: AppRadius.mdBorder,
+                    ),
+                    child: const Icon(Icons.bolt, color: AppColors.primaryContainer),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Supabase Realtime Backend & Auth', style: AppTypography.headlineSM()),
+                        Text(
+                          SupabaseService.instance.isLiveSupabase
+                              ? '⚡ Live Supabase Connected'
+                              : 'Free Realtime Mode (Offline-first)',
+                          style: AppTypography.labelSM(
+                            color: SupabaseService.instance.isLiveSupabase
+                                ? AppColors.success
+                                : AppColors.primaryContainer,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'PadCare runs with free realtime auth, database sync, and live tracking powered by Supabase. Enter your Supabase project credentials to synchronize with your cloud PostgreSQL database.',
+                style: AppTypography.bodySM(color: AppColors.neutralMuted),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: urlController,
+                decoration: InputDecoration(
+                  labelText: 'Supabase Project URL',
+                  hintText: 'https://xyzcompany.supabase.co',
+                  prefixIcon: const Icon(Icons.link),
+                  border: OutlineInputBorder(borderRadius: AppRadius.mdBorder),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: keyController,
+                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: 'Supabase Anon / Public Key',
+                  hintText: 'eyJhbGciOi...',
+                  prefixIcon: const Icon(Icons.vpn_key),
+                  border: OutlineInputBorder(borderRadius: AppRadius.mdBorder),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primaryContainer,
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: () async {
+                        final url = urlController.text.trim();
+                        final key = keyController.text.trim();
+                        if (url.isNotEmpty && key.isNotEmpty) {
+                          final ok = await SupabaseService.instance.updateCredentials(
+                            url: url,
+                            anonKey: key,
+                          );
+                          if (ctx.mounted) Navigator.pop(ctx);
+                          if (mounted) {
+                            setState(() {});
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(ok
+                                    ? '⚡ Connected to live Supabase backend!'
+                                    : 'Saved. Running in offline/simulation mode.'),
+                              ),
+                            );
+                          }
+                        }
+                      },
+                      child: const Text('Save & Connect'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showGeminiConfigSheet() {
+    final keyController = TextEditingController(
+      text: LocalStorage.getString(AppConstants.storageKeyGeminiApiKey) ?? '',
+    );
+    final hasKey = GeminiService.instance.hasApiKey;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(ctx).viewInsets.bottom,
+        ),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.softLavender,
+                      borderRadius: AppRadius.mdBorder,
+                    ),
+                    child: const Icon(Icons.auto_awesome, color: AppColors.primaryContainer),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('HerHelp Gemini AI Engine', style: AppTypography.headlineSM()),
+                        Text(
+                          hasKey
+                              ? '✨ Live Gemini 1.5 Flash Active'
+                              : 'Configure Free Gemini API Key',
+                          style: AppTypography.labelSM(
+                            color: hasKey ? AppColors.success : AppColors.primaryContainer,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'HerHelp uses Google Gemini 1.5 Flash for confidential, compassionate menstrual health guidance. Enter your free API key from Google AI Studio to unlock live generative responses.',
+                style: AppTypography.bodySM(color: AppColors.neutralMuted),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: keyController,
+                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: 'Google Gemini API Key',
+                  hintText: hasKey ? '••••••••••••••••••••' : 'AIzaSy...',
+                  prefixIcon: const Icon(Icons.key, color: AppColors.primaryContainer),
+                  border: OutlineInputBorder(borderRadius: AppRadius.mdBorder),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primaryContainer,
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: () async {
+                        final key = keyController.text.trim();
+                        if (key.isNotEmpty) {
+                          await GeminiService.instance.setApiKey(key);
+                          if (ctx.mounted) Navigator.pop(ctx);
+                          if (mounted) {
+                            setState(() {});
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('✨ Gemini API Key saved successfully!'),
+                              ),
+                            );
+                          }
+                        }
+                      },
+                      child: const Text('Save Key'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isCamouflage) {
@@ -71,16 +322,19 @@ class _UserProfilePrivacyScreenState extends State<UserProfilePrivacyScreen> {
       );
     }
 
+    final currentLang = ref.watch(appLocaleProvider);
+    final tts = ref.watch(ttsServiceProvider);
     final user = _store.currentUser;
+    final activeVoice = tts.selectedVoice ?? tts.getDefaultVoiceForLanguage(currentLang.code);
 
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: Text('Profile & Privacy Settings', style: AppTypography.headlineSM()),
+        title: Text(context.tr('profile'), style: AppTypography.headlineSM()),
         actions: [
           TextButton.icon(
             icon: const Icon(Icons.bolt, color: AppColors.coralPink, size: 18),
-            label: Text('Quick Exit', style: AppTypography.labelSM(color: AppColors.coralPink)),
+            label: Text(context.tr('quickExit'), style: AppTypography.labelSM(color: AppColors.coralPink)),
             onPressed: () => setState(() => _isCamouflage = true),
           ),
         ],
@@ -145,8 +399,103 @@ class _UserProfilePrivacyScreenState extends State<UserProfilePrivacyScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // Section 1: Privacy & Dignity Shield
-                Text('Privacy & Dignity Shield', style: AppTypography.labelLG()),
+                // Section 1: Localization & Language (Primary feature)
+                Text(context.tr('navigationLanguage'), style: AppTypography.labelLG()),
+                const SizedBox(height: 8),
+                DignityCard(
+                  onTap: () {
+                    LanguageSelectorSheet.show(
+                      context,
+                      currentLocaleCode: currentLang.code,
+                      onSelect: (lang) {
+                        ref.read(appLocaleProvider.notifier).setLanguage(lang);
+                      },
+                    );
+                  },
+                  child: Row(
+                    children: [
+                      const Icon(Icons.translate, color: AppColors.primaryContainer),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(context.tr('language'), style: AppTypography.labelMD()),
+                            Text(
+                              '${currentLang.flag} ${currentLang.nativeName} (${currentLang.name})',
+                              style: AppTypography.bodySM(color: AppColors.primaryContainer),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.chevron_right, color: AppColors.neutralMuted),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Section 2: Text-to-Speech & FreeAPI Voices
+                Text(context.tr('voiceSettings'), style: AppTypography.labelLG()),
+                const SizedBox(height: 8),
+                DignityCard(
+                  child: Column(
+                    children: [
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.record_voice_over, color: AppColors.primaryContainer),
+                        title: Text(context.tr('voiceLabel'), style: AppTypography.labelMD()),
+                        subtitle: Text(
+                          '${activeVoice.genderIcon} ${activeVoice.name} • ${activeVoice.language} (${activeVoice.country})',
+                          style: AppTypography.bodySM(color: AppColors.neutralDark),
+                        ),
+                        trailing: const Icon(Icons.tune, color: AppColors.primaryContainer),
+                        onTap: () {
+                          VoiceSelectorSheet.show(context, currentLanguageCode: currentLang.code);
+                        },
+                      ),
+                      const Divider(color: AppColors.borderSubtle),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          TextButton.icon(
+                            icon: Icon(
+                              tts.isPlaying ? Icons.stop_circle : Icons.play_arrow,
+                              color: AppColors.primaryContainer,
+                            ),
+                            label: Text(
+                              tts.isPlaying ? context.tr('stopAudio') : context.tr('testVoice'),
+                              style: AppTypography.labelMD(color: AppColors.primaryContainer),
+                            ),
+                            onPressed: () {
+                              if (tts.isPlaying) {
+                                tts.stop();
+                              } else {
+                                final sample = currentLang.code == 'sw'
+                                    ? 'Habari! Sauti hii ya FreeAPI inafanya kazi vizuri kwenye PadCare.'
+                                    : currentLang.code == 'fr'
+                                        ? 'Bonjour! Cette voix FreeAPI fonctionne parfaitement sur PadCare.'
+                                        : currentLang.code == 'ar'
+                                            ? 'مرحباً! هذا الصوت يعمل بنجاح مع تطبيق باد كير.'
+                                            : 'Hello! This FreeAPI text to speech voice is fully integrated and active on PadCare.';
+                                tts.speak(sample, voice: activeVoice, languageCode: currentLang.code);
+                              }
+                            },
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              VoiceSelectorSheet.show(context, currentLanguageCode: currentLang.code);
+                            },
+                            child: const Text('Browse 580+ Voices'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Section 3: Privacy & Dignity Shield
+                Text(context.tr('privacyShield'), style: AppTypography.labelLG()),
                 const SizedBox(height: 8),
                 DignityCard(
                   child: Column(
@@ -167,8 +516,8 @@ class _UserProfilePrivacyScreenState extends State<UserProfilePrivacyScreen> {
                       SwitchListTile(
                         value: user.biometricLock,
                         activeThumbColor: AppColors.primaryContainer,
-                        title: const Text('Biometric / Passkey Protection'),
-                        subtitle: const Text('Require fingerprint to reveal voucher pickup codes.'),
+                        title: Text(context.tr('biometricProtection')),
+                        subtitle: Text(context.tr('biometricSub')),
                         contentPadding: EdgeInsets.zero,
                         onChanged: (val) {
                           setState(() {
@@ -180,8 +529,8 @@ class _UserProfilePrivacyScreenState extends State<UserProfilePrivacyScreen> {
                       ListTile(
                         contentPadding: EdgeInsets.zero,
                         leading: const Icon(Icons.visibility_off, color: AppColors.primaryContainer),
-                        title: const Text('Discreet Calculator Camouflage'),
-                        subtitle: const Text('One-tap disguised calculator to hide screen.'),
+                        title: Text(context.tr('calculatorCamouflage')),
+                        subtitle: Text(context.tr('calculatorCamouflageSub')),
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => setState(() => _isCamouflage = true),
                       ),
@@ -190,45 +539,8 @@ class _UserProfilePrivacyScreenState extends State<UserProfilePrivacyScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // Section 2: Localization & Language
-                Text('Navigation & Language', style: AppTypography.labelLG()),
-                const SizedBox(height: 8),
-                DignityCard(
-                  onTap: () {
-                    LanguageSelectorSheet.show(
-                      context,
-                      currentLocaleCode: user.selectedLocale,
-                      onSelect: (lang) {
-                        setState(() {
-                          _store.currentUser = user.copyWith(selectedLocale: lang.code);
-                        });
-                      },
-                    );
-                  },
-                  child: Row(
-                    children: [
-                      const Icon(Icons.translate, color: AppColors.primaryContainer),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('App Language', style: AppTypography.labelMD()),
-                            Text(
-                              AppLocales.fromCode(user.selectedLocale).nativeName,
-                              style: AppTypography.bodySM(color: AppColors.primaryContainer),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const Icon(Icons.chevron_right, color: AppColors.neutralMuted),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // Section 3: Field Role Workflows Switcher
-                Text('Portal & Field Access', style: AppTypography.labelLG()),
+                // Section 4: Field Role Workflows Switcher
+                Text(context.tr('portalAccess'), style: AppTypography.labelLG()),
                 const SizedBox(height: 8),
                 DignityCard(
                   child: Column(
@@ -236,7 +548,7 @@ class _UserProfilePrivacyScreenState extends State<UserProfilePrivacyScreen> {
                       ListTile(
                         contentPadding: EdgeInsets.zero,
                         leading: const Icon(Icons.storefront, color: AppColors.primaryContainer),
-                        title: const Text('Supplier / Dispensary Dashboard'),
+                        title: Text(context.tr('supplierDashboard')),
                         subtitle: const Text('Dispensary counter PIN verification.'),
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => context.push('/supplier'),
@@ -245,7 +557,7 @@ class _UserProfilePrivacyScreenState extends State<UserProfilePrivacyScreen> {
                       ListTile(
                         contentPadding: EdgeInsets.zero,
                         leading: const Icon(Icons.inventory, color: AppColors.primaryContainer),
-                        title: const Text('Stock Management'),
+                        title: Text(context.tr('stockManagement')),
                         subtitle: const Text('Real-time supply ledger and intake.'),
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => context.push('/stock'),
@@ -254,7 +566,7 @@ class _UserProfilePrivacyScreenState extends State<UserProfilePrivacyScreen> {
                       ListTile(
                         contentPadding: EdgeInsets.zero,
                         leading: const Icon(Icons.admin_panel_settings, color: AppColors.primaryContainer),
-                        title: const Text('Admin Verification HQ'),
+                        title: Text(context.tr('adminVerification')),
                         subtitle: const Text('Kampala Central Grid oversight.'),
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => context.push('/admin'),
@@ -263,7 +575,7 @@ class _UserProfilePrivacyScreenState extends State<UserProfilePrivacyScreen> {
                       ListTile(
                         contentPadding: EdgeInsets.zero,
                         leading: const Icon(Icons.sync, color: AppColors.primaryContainer),
-                        title: const Text('Full Offline Sync Manager'),
+                        title: Text(context.tr('offlineQueue')),
                         subtitle: const Text('2G / Edge Mesh queue and conflict resolver.'),
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => context.push('/sync'),
@@ -273,7 +585,71 @@ class _UserProfilePrivacyScreenState extends State<UserProfilePrivacyScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // Section 4: Legal & Policy
+                // Section 5: Realtime Backend & Gemini AI Settings
+                Text('Cloud & Intelligence Services', style: AppTypography.labelLG()),
+                const SizedBox(height: 8),
+                DignityCard(
+                  child: Column(
+                    children: [
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.bolt, color: AppColors.primaryContainer),
+                        title: const Text('Realtime Backend & Auth'),
+                        subtitle: Text(
+                          SupabaseService.instance.isLiveSupabase
+                              ? '⚡ Live Supabase Connected'
+                              : 'Free Realtime Engine (Offline-First Active)',
+                        ),
+                        trailing: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: SupabaseService.instance.isLiveSupabase
+                                ? AppColors.success.withValues(alpha: 0.15)
+                                : AppColors.secondaryContainer,
+                            borderRadius: AppRadius.fullBorder,
+                          ),
+                          child: Text(
+                            SupabaseService.instance.isLiveSupabase ? 'Online' : 'Free Demo',
+                            style: AppTypography.labelSM(
+                              color: SupabaseService.instance.isLiveSupabase
+                                  ? AppColors.success
+                                  : AppColors.primaryContainer,
+                            ),
+                          ),
+                        ),
+                        onTap: _showSupabaseConfigSheet,
+                      ),
+                      const Divider(color: AppColors.borderSubtle),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.auto_awesome, color: AppColors.primaryContainer),
+                        title: const Text('HerHelp Assistant (Gemini AI)'),
+                        subtitle: Text(
+                          GeminiService.instance.hasApiKey
+                              ? 'Google Gemini 1.5 Flash Connected'
+                              : 'Tap to configure free Gemini API Key',
+                        ),
+                        trailing: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: GeminiService.instance.hasApiKey
+                                ? AppColors.primaryContainer.withValues(alpha: 0.15)
+                                : AppColors.softLavender,
+                            borderRadius: AppRadius.fullBorder,
+                          ),
+                          child: Text(
+                            GeminiService.instance.hasApiKey ? '✨ Active' : 'Setup',
+                            style: AppTypography.labelSM(color: AppColors.primaryContainer),
+                          ),
+                        ),
+                        onTap: _showGeminiConfigSheet,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Section 6: Legal & Policy
                 Text('Guidance & Rights', style: AppTypography.labelLG()),
                 const SizedBox(height: 8),
                 DignityCard(
@@ -282,7 +658,7 @@ class _UserProfilePrivacyScreenState extends State<UserProfilePrivacyScreen> {
                       ListTile(
                         contentPadding: EdgeInsets.zero,
                         leading: const Icon(Icons.policy_outlined, color: AppColors.neutralMuted),
-                        title: const Text('Terms of Use & Conditions'),
+                        title: Text(context.tr('termsAndConsent')),
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => context.push('/terms-consent'),
                       ),
@@ -301,7 +677,7 @@ class _UserProfilePrivacyScreenState extends State<UserProfilePrivacyScreen> {
 
                 // Emergency Reset Button
                 DignityButton(
-                  text: 'Emergency Data Reset (Wipe All)',
+                  text: context.tr('emergencyReset'),
                   style: DignityButtonStyle.accent,
                   icon: const Icon(Icons.delete_forever, color: Colors.white),
                   onPressed: _emergencyReset,
@@ -310,7 +686,7 @@ class _UserProfilePrivacyScreenState extends State<UserProfilePrivacyScreen> {
                 Center(
                   child: TextButton.icon(
                     icon: const Icon(Icons.logout, color: AppColors.neutralMuted, size: 18),
-                    label: Text('Sign Out', style: AppTypography.labelMD(color: AppColors.neutralMuted)),
+                    label: Text(context.tr('quickExit'), style: AppTypography.labelMD(color: AppColors.neutralMuted)),
                     onPressed: () => context.go('/welcome'),
                   ),
                 ),

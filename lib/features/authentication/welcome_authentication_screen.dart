@@ -1,33 +1,35 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_elevation.dart';
 import '../../app/theme/app_radius.dart';
 import '../../app/theme/app_typography.dart';
 import '../../core/constants/asset_paths.dart';
-import '../../core/localization/app_locale.dart';
+import '../../core/localization/app_localizations.dart';
+import '../../core/localization/locale_provider.dart';
 import '../../core/responsive/responsive_layout.dart';
+import '../../core/services/supabase_service.dart';
 import '../../shared/widgets/dignity_button.dart';
 import '../../shared/widgets/dignity_card.dart';
 import '../../shared/widgets/dignity_text_field.dart';
 import '../../shared/widgets/language_selector_sheet.dart';
 
-class WelcomeAuthenticationScreen extends StatefulWidget {
+class WelcomeAuthenticationScreen extends ConsumerStatefulWidget {
   const WelcomeAuthenticationScreen({super.key});
 
   @override
-  State<WelcomeAuthenticationScreen> createState() =>
+  ConsumerState<WelcomeAuthenticationScreen> createState() =>
       _WelcomeAuthenticationScreenState();
 }
 
 class _WelcomeAuthenticationScreenState
-    extends State<WelcomeAuthenticationScreen> {
+    extends ConsumerState<WelcomeAuthenticationScreen> {
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
   String _selectedCountryCode = '+256';
-  SupportedLanguage _currentLang = AppLocales.swahili;
 
   @override
   void dispose() {
@@ -39,6 +41,8 @@ class _WelcomeAuthenticationScreenState
 
   @override
   Widget build(BuildContext context) {
+    final currentLang = ref.watch(appLocaleProvider);
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -65,7 +69,7 @@ class _WelcomeAuthenticationScreenState
                               size: 16, color: AppColors.primaryContainer),
                           const SizedBox(width: 6),
                           Text(
-                            'Encrypted • EAC Community',
+                            context.tr('encryptedBadge'),
                             style: AppTypography.labelSM(
                                 color: AppColors.primaryContainer),
                           ),
@@ -76,9 +80,9 @@ class _WelcomeAuthenticationScreenState
                       onTap: () {
                         LanguageSelectorSheet.show(
                           context,
-                          currentLocaleCode: _currentLang.code,
+                          currentLocaleCode: currentLang.code,
                           onSelect: (lang) {
-                            setState(() => _currentLang = lang);
+                            ref.read(appLocaleProvider.notifier).setLanguage(lang);
                           },
                         );
                       },
@@ -97,7 +101,7 @@ class _WelcomeAuthenticationScreenState
                                 size: 16, color: AppColors.primaryContainer),
                             const SizedBox(width: 4),
                             Text(
-                              _currentLang.code.toUpperCase(),
+                              currentLang.code.toUpperCase(),
                               style: AppTypography.labelSM(
                                   color: AppColors.neutralDark),
                             ),
@@ -136,13 +140,13 @@ class _WelcomeAuthenticationScreenState
                 const SizedBox(height: 16),
 
                 Text(
-                  'PadCare',
+                  context.tr('appName'),
                   textAlign: TextAlign.center,
                   style: AppTypography.headlineXL(color: AppColors.primary),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Care Within Reach • Menstrual Health & Dignity',
+                  context.tr('appTagline'),
                   textAlign: TextAlign.center,
                   style: AppTypography.bodyMD(color: AppColors.neutralMuted),
                 ),
@@ -155,28 +159,28 @@ class _WelcomeAuthenticationScreenState
                     children: [
                       DignityTextField(
                         controller: _nameController,
-                        label: 'Full Name or Field Pseudonym',
-                        hintText: 'e.g. Hope Seeker or Matron Harriet',
+                        label: context.tr('fullNameLabel'),
+                        hintText: context.tr('fullNameHint'),
                         prefixIcon: const Icon(Icons.person_outline,
-                            color: AppColors.primaryContainer),
+                            color: AppColors.neutralMuted),
                       ),
                       const SizedBox(height: 16),
                       DignityTextField(
                         controller: _emailController,
-                        label: 'Email Address',
-                        hintText: 'name@organization.org',
+                        label: context.tr('emailLabel'),
+                        hintText: context.tr('emailHint'),
                         keyboardType: TextInputType.emailAddress,
-                        prefixIcon: const Icon(Icons.mail_outline,
-                            color: AppColors.primaryContainer),
+                        prefixIcon: const Icon(Icons.email_outlined,
+                            color: AppColors.neutralMuted),
                       ),
                       const SizedBox(height: 16),
                       DignityTextField(
                         controller: _passwordController,
-                        label: 'Password',
-                        hintText: '••••••••',
+                        label: context.tr('passwordLabel'),
+                        hintText: context.tr('passwordHint'),
                         obscureText: _obscurePassword,
                         prefixIcon: const Icon(Icons.lock_outline,
-                            color: AppColors.primaryContainer),
+                            color: AppColors.neutralMuted),
                         suffixIcon: IconButton(
                           icon: Icon(
                             _obscurePassword
@@ -193,27 +197,25 @@ class _WelcomeAuthenticationScreenState
                       ),
                       const SizedBox(height: 24),
 
-                      // Continue with Email button
+                      // Continue with Email primary action
                       DignityButton(
-                        text: 'Continue with Email',
-                        icon: const Icon(Icons.arrow_forward,
-                            size: 20, color: Colors.white),
+                        text: context.tr('continueWithEmail'),
+                        icon: const Icon(Icons.arrow_forward, color: Colors.white),
                         onPressed: () {
-                          context.push('/terms-consent');
+                          context.push('/security-verification');
                         },
                       ),
                       const SizedBox(height: 16),
 
-                      // Divider "Or continue with"
+                      // Or divider
                       Row(
                         children: [
                           const Expanded(
                               child: Divider(color: AppColors.borderSubtle)),
                           Padding(
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 12),
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
                             child: Text(
-                              'Or continue with',
+                              context.tr('continueWithGoogle'),
                               style: AppTypography.labelSM(
                                   color: AppColors.neutralMuted),
                             ),
@@ -232,6 +234,25 @@ class _WelcomeAuthenticationScreenState
                             color: AppColors.primaryContainer),
                         onPressed: () {
                           context.push('/terms-consent');
+                        },
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Anonymous Dignity Access
+                      DignityButton(
+                        text: 'Anonymous Access (Zero PII)',
+                        style: DignityButtonStyle.text,
+                        icon: const Icon(Icons.shield_outlined,
+                            color: AppColors.primaryContainer),
+                        onPressed: () async {
+                          await SupabaseService.instance.signInAnonymously(
+                            pseudonym: _nameController.text.trim().isNotEmpty
+                                ? _nameController.text.trim()
+                                : null,
+                          );
+                          if (context.mounted) {
+                            context.go('/dashboard');
+                          }
                         },
                       ),
                     ],
@@ -303,7 +324,7 @@ class _WelcomeAuthenticationScreenState
                   spacing: 12,
                   children: [
                     TextButton(
-                      child: Text('Terms of Care',
+                      child: Text(context.tr('termsAndConsent'),
                           style: AppTypography.labelSM(
                               color: AppColors.neutralMuted)),
                       onPressed: () => context.push('/terms-consent'),

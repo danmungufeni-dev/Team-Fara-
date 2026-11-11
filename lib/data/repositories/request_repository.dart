@@ -1,9 +1,11 @@
 import 'dart:math';
 import '../models/request_voucher.dart';
 import '../services/mock_backend_store.dart';
+import '../../core/services/supabase_service.dart';
 
 abstract class IRequestRepository {
   Future<List<RequestVoucher>> getVouchers();
+  Stream<List<RequestVoucher>> streamVouchers();
   Future<RequestVoucher?> getActiveVoucher();
   Future<RequestVoucher> createDiscreetRequest({
     required String hubId,
@@ -16,6 +18,12 @@ abstract class IRequestRepository {
 
 class RequestRepository implements IRequestRepository {
   final MockBackendStore _store = MockBackendStore();
+  final SupabaseService _supabase = SupabaseService.instance;
+
+  @override
+  Stream<List<RequestVoucher>> streamVouchers() {
+    return _supabase.streamRequests();
+  }
 
   @override
   Future<List<RequestVoucher>> getVouchers() async {
@@ -55,7 +63,11 @@ class RequestRepository implements IRequestRepository {
       pin: '$codeNum',
     );
 
-    _store.vouchers.insert(0, newVoucher);
+    await _supabase.createRequest(newVoucher);
+
+    if (!_store.vouchers.any((v) => v.id == newVoucher.id)) {
+      _store.vouchers.insert(0, newVoucher);
+    }
     _store.currentUser = _store.currentUser.copyWith(
       activeRequestsCount: _store.currentUser.activeRequestsCount + 1,
     );
@@ -70,6 +82,7 @@ class RequestRepository implements IRequestRepository {
     );
     if (index >= 0) {
       final v = _store.vouchers[index];
+      await _supabase.updateRequestStatus(v.id, VoucherStatus.collected);
       _store.vouchers[index] = RequestVoucher(
         id: v.id,
         voucherCode: v.voucherCode,

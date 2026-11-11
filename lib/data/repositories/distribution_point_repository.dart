@@ -1,8 +1,10 @@
 import '../models/distribution_point.dart';
 import '../services/mock_backend_store.dart';
+import '../../core/services/supabase_service.dart';
 
 abstract class IDistributionPointRepository {
   Future<List<DistributionPoint>> getHubs({String? query, String? city});
+  Stream<List<DistributionPoint>> streamHubs();
   Future<DistributionPoint?> getHubById(String id);
   Future<void> addHub(DistributionPoint hub);
   Future<List<DistributionPoint>> getSavedHubs();
@@ -11,6 +13,12 @@ abstract class IDistributionPointRepository {
 
 class DistributionPointRepository implements IDistributionPointRepository {
   final MockBackendStore _store = MockBackendStore();
+  final SupabaseService _supabase = SupabaseService.instance;
+
+  @override
+  Stream<List<DistributionPoint>> streamHubs() {
+    return _supabase.streamDistributionPoints();
+  }
 
   @override
   Future<List<DistributionPoint>> getHubs({String? query, String? city}) async {
@@ -40,7 +48,10 @@ class DistributionPointRepository implements IDistributionPointRepository {
 
   @override
   Future<void> addHub(DistributionPoint hub) async {
-    _store.hubs.insert(0, hub);
+    await _supabase.upsertDistributionPoint(hub);
+    if (!_store.hubs.any((h) => h.id == hub.id)) {
+      _store.hubs.insert(0, hub);
+    }
   }
 
   @override
