@@ -44,12 +44,13 @@ jobs:
       - name: Build Release APK
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           TRANSLATION_API_URL: ${{ vars.TRANSLATION_API_URL }}
         run: |
           args=()
           if [ -n "$SUPABASE_URL" ]; then args+=(--dart-define="SUPABASE_URL=$SUPABASE_URL"); fi
-          if [ -n "$SUPABASE_ANON_KEY" ]; then args+=(--dart-define="SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY"); fi
+          if [ -n "$SUPABASE_PUBLISHABLE_KEY" ]; then args+=(--dart-define="SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY"); elif [ -n "$SUPABASE_ANON_KEY" ]; then args+=(--dart-define="SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY"); fi
           if [ -n "$TRANSLATION_API_URL" ]; then args+=(--dart-define="TRANSLATION_API_URL=$TRANSLATION_API_URL"); fi
           flutter build apk --release "${args[@]}"
 
