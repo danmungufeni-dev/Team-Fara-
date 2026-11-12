@@ -27,15 +27,16 @@ The app reads Dart compile-time defines; creating a `.env` file by itself does n
 
 In GitHub, open **Settings → Secrets and variables → Actions** for this repository and add:
 
-- Repository secret `SUPABASE_URL`: Supabase Project URL.
-- Repository secret `SUPABASE_ANON_KEY`: Supabase publishable/anon key only.
+- Repository secret `SUPABASE_URL`: `https://eztqoyhbcfcsxvommgxi.supabase.co`.
+- Repository secret `SUPABASE_PUBLISHABLE_KEY`: the project's publishable key (never a `service_role` or secret key).
+- The older `SUPABASE_ANON_KEY` secret is still accepted for backward compatibility, but new builds should use `SUPABASE_PUBLISHABLE_KEY`.
 - Optional repository variable `TRANSLATION_API_URL`: publicly reachable HTTPS URL for the Go translation API.
 
-Push to `main`, `feature/**`, or `fix/**`, or run **Actions → Build Android APK → Run workflow**. After the workflow succeeds, open its run and download the `padcare-release-apk` artifact. If Supabase secrets are not configured, the APK can still build, but it will use simulation mode.
+Add the two repository secrets before expecting a live-connected APK. Push to `main`, `feature/**`, or `fix/**`, or run **Actions → Build Android APK → Run workflow**. After the workflow succeeds, open its run and download the `padcare-release-apk` artifact. If Supabase secrets are not configured, the APK can still build, but it will use simulation mode.
 
 ## 3. Configure Supabase
 
-1. Create a Supabase project and copy the Project URL and publishable/anon key.
+1. Use the configured project `eztqoyhbcfcsxvommgxi`; copy its Project URL and publishable key from Project Settings → API Keys.
 2. Review `backend/supabase_schema.sql` before applying it in **SQL Editor**.
 3. Enable the authentication methods the app will use in **Authentication → Providers**.
 4. In **Authentication → URL Configuration**, configure only the redirect URLs you actually use.
