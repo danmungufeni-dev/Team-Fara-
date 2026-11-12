@@ -135,7 +135,8 @@ class SupabaseService {
         await SecureStorage.writeToken(AppConstants.storageKeyUserToken, res.session?.accessToken ?? 'sb_token');
         return user;
       } catch (e) {
-        debugPrint('⚠️ [SupabaseService] Sign-up failed on live client, falling back to local: $e');\n        rethrow;
+        debugPrint('⚠️ [SupabaseService] Sign-up failed on live client, falling back to local: $e');
+        rethrow;
       }
     }
 
@@ -185,7 +186,8 @@ class SupabaseService {
         await SecureStorage.writeToken(AppConstants.storageKeyUserToken, res.session?.accessToken ?? 'sb_token');
         return user;
       } catch (e) {
-        debugPrint('⚠️ [SupabaseService] Sign-in failed on live client, falling back to local: $e');\n        rethrow;
+        debugPrint('⚠️ [SupabaseService] Sign-in failed on live client, falling back to local: $e');
+        rethrow;
       }
     }
 
@@ -224,7 +226,8 @@ class SupabaseService {
         _authStreamController.add(user);
         return user;
       } catch (e) {
-        debugPrint('⚠️ [SupabaseService] Anonymous auth failed on live client, falling back: $e');\n        rethrow;
+        debugPrint('⚠️ [SupabaseService] Anonymous auth failed on live client, falling back: $e');
+        rethrow;
       }
     }
 
@@ -292,7 +295,8 @@ class SupabaseService {
         await _client!.from('distribution_points').upsert(point.toJson());
         return;
       } catch (e) {
-        debugPrint('⚠️ [SupabaseService] Live upsert failed: $e');\n        rethrow;
+        debugPrint('⚠️ [SupabaseService] Live upsert failed: $e');
+        rethrow;
       }
     }
 
@@ -343,7 +347,8 @@ class SupabaseService {
         await _client!.from('requests').insert(voucher.toJson());
         return;
       } catch (e) {
-        debugPrint('⚠️ [SupabaseService] Live createRequest failed: $e');\n        rethrow;
+        debugPrint('⚠️ [SupabaseService] Live createRequest failed: $e');
+        rethrow;
       }
     }
 
@@ -360,7 +365,8 @@ class SupabaseService {
             .eq('id', voucherId);
         return;
       } catch (e) {
-        debugPrint('⚠️ [SupabaseService] Live update status failed: $e');\n        rethrow;
+        debugPrint('⚠️ [SupabaseService] Live update status failed: $e');
+        rethrow;
       }
     }
 
@@ -417,7 +423,8 @@ class SupabaseService {
         await _client!.from('messages').insert(msg.toJson());
         return;
       } catch (e) {
-        debugPrint('⚠️ [SupabaseService] Live sendMessage failed: $e');\n        rethrow;
+        debugPrint('⚠️ [SupabaseService] Live sendMessage failed: $e');
+        rethrow;
       }
     }
 
