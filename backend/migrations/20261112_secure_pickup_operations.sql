@@ -46,7 +46,7 @@ begin
   if length(trim(coalesce(p_allocation_summary,''))) not between 1 and 300 then raise exception 'invalid_allocation'; end if;
   select * into h from public.distribution_points where id=p_hub_id and is_verified=true;
   if not found then raise exception 'pickup_point_unavailable'; end if;
-  code := upper(encode(extensions.gen_random_bytes(10),'hex'));
+  code := upper(encode(gen_random_bytes(10),'hex'));
   insert into public.requests(id,voucher_code,hub_id,hub_name,allocation_summary,status,created_at,expires_at,pickup_window,pin,owner_id)
   values (gen_random_uuid()::text, code, h.id, h.name, trim(p_allocation_summary), 'readyForPickup', now(), now()+interval '3 hours',
           left(coalesce(nullif(trim(p_pickup_window),''),'Within the next 2 hours'),80), null, u)
