@@ -2,15 +2,19 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, 'feature/**', 'fix/**' ]
   pull_request:
     branches: [ main ]
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build:
     name: Build PadCare APK
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout Repository
@@ -38,7 +42,17 @@ jobs:
         run: flutter test
 
       - name: Build Release APK
-        run: flutter build apk --release
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          TRANSLATION_API_URL: ${{ vars.TRANSLATION_API_URL }}
+        run: |
+          args=()
+          if [ -n "$SUPABASE_URL" ]; then args+=(--dart-define="SUPABASE_URL=$SUPABASE_URL"); fi
+          if [ -n "$SUPABASE_PUBLISHABLE_KEY" ]; then args+=(--dart-define="SUPABASE_PUBLISHABLE_KEY=$SUPABASE_PUBLISHABLE_KEY"); elif [ -n "$SUPABASE_ANON_KEY" ]; then args+=(--dart-define="SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY"); fi
+          if [ -n "$TRANSLATION_API_URL" ]; then args+=(--dart-define="TRANSLATION_API_URL=$TRANSLATION_API_URL"); fi
+          flutter build apk --release "${args[@]}"
 
       - name: Upload PadCare Release APK
         uses: actions/upload-artifact@v4
@@ -46,3 +60,4 @@ jobs:
           name: padcare-release-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
+          retention-days: 14

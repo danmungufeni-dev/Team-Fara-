@@ -23,26 +23,26 @@ class DiscreetMessage {
 
   Map<String, dynamic> toJson() => {
         'id': id,
-        'voucherCode': voucherCode,
-        'senderId': senderId,
-        'senderName': senderName,
+        'voucher_code': voucherCode,
+        'sender_id': senderId,
+        'sender_name': senderName,
         'message': message,
         'timestamp': timestamp.toIso8601String(),
-        'isSeeker': isSeeker,
-        'isDelivered': isDelivered,
-        'isRead': isRead,
+        'is_seeker': isSeeker,
+        'is_delivered': isDelivered,
+        'is_read': isRead,
       };
 
   factory DiscreetMessage.fromJson(Map<String, dynamic> json) =>
       DiscreetMessage(
         id: json['id'] as String,
-        voucherCode: json['voucherCode'] as String,
-        senderId: json['senderId'] as String,
-        senderName: json['senderName'] as String,
+        voucherCode: (json['voucher_code'] ?? json['voucherCode']) as String,
+        senderId: (json['sender_id'] ?? json['senderId']) as String,
+        senderName: (json['sender_name'] ?? json['senderName']) as String,
         message: json['message'] as String,
         timestamp: DateTime.parse(json['timestamp'] as String),
-        isSeeker: json['isSeeker'] as bool? ?? true,
-        isDelivered: json['isDelivered'] as bool? ?? true,
-        isRead: json['isRead'] as bool? ?? true,
+        isSeeker: (json['is_seeker'] ?? json['isSeeker']) as bool? ?? true,
+        isDelivered: (json['is_delivered'] ?? json['isDelivered']) as bool? ?? false,
+        isRead: (json['is_read'] ?? json['isRead']) as bool? ?? false,
       );
 }

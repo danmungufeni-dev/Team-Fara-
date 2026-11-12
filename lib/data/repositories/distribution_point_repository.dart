@@ -22,7 +22,7 @@ class DistributionPointRepository implements IDistributionPointRepository {
 
   @override
   Future<List<DistributionPoint>> getHubs({String? query, String? city}) async {
-    List<DistributionPoint> list = _store.hubs;
+    List<DistributionPoint> list = await _supabase.fetchDistributionPoints();
     if (city != null && city.isNotEmpty && city.toLowerCase() != 'all') {
       list = list.where((h) => h.city.toLowerCase() == city.toLowerCase()).toList();
     }
@@ -39,11 +39,7 @@ class DistributionPointRepository implements IDistributionPointRepository {
 
   @override
   Future<DistributionPoint?> getHubById(String id) async {
-    try {
-      return _store.hubs.firstWhere((h) => h.id == id);
-    } catch (_) {
-      return _store.hubs.isNotEmpty ? _store.hubs.first : null;
-    }
+    return _supabase.fetchDistributionPointById(id);
   }
 
   @override
