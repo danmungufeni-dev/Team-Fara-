@@ -12,6 +12,8 @@ abstract class AppConstants {
   static const String defaultTranslationApiUrl = 'http://localhost:8000';
   static const String envGoogleMapsApiKey = 'GOOGLE_MAPS_API_KEY';
   static const String envSupabaseUrl = 'SUPABASE_URL';
+  // Public project endpoint; the publishable key is supplied separately at build time.
+  static const String defaultSupabaseUrl = 'https://eztqoyhbcfcsxvommgxi.supabase.co';
   static const String envSupabasePublishableKey = 'SUPABASE_PUBLISHABLE_KEY';
   // Backwards compatibility with older builds that used the legacy anon-key define.
   static const String envSupabaseAnonKey = 'SUPABASE_ANON_KEY';
