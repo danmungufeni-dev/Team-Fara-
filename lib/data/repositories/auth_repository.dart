@@ -23,36 +23,38 @@ class AuthRepository implements IAuthRepository {
   final MockBackendStore _store = MockBackendStore();
 
   @override
-  Future<UserProfile> getCurrentUser() async {
-    return _supabase.currentUser;
-  }
+  Future<UserProfile> getCurrentUser() async => _supabase.currentUser;
 
   @override
   Future<UserProfile> signInWithEmail(
     String email,
     String password, {
     String? pseudonym,
-  }) async {
-    return await _supabase.signInWithEmail(
-      email: email,
-      password: password,
-    );
+  }) {
+    return _supabase.signInWithEmail(email: email, password: password);
   }
 
   @override
-  Future<UserProfile> signInAnonymously({String? pseudonym}) async {
-    return await _supabase.signInAnonymously(pseudonym: pseudonym);
+  Future<UserProfile> signInAnonymously({String? pseudonym}) {
+    return _supabase.signInAnonymously(pseudonym: pseudonym);
   }
 
   @override
   Future<UserProfile> signInWithGoogle() async {
-    await SecureStorage.writeToken('auth_token', 'mock_google_token');
-    return _store.currentUser;
+    // Do not report a successful Google login using a fabricated token.
+    // Configure a real Supabase OAuth flow before enabling this action.
+    throw UnsupportedError(
+      'Google sign-in is not configured yet. Use a configured sign-in method.',
+    );
   }
 
   @override
   Future<bool> verifyOtp(String code) async {
-    return code.length == 6;
+    // A six-digit shape check is not proof that an OTP is valid. Verification
+    // must be performed by Supabase Auth or a trusted server endpoint.
+    throw UnsupportedError(
+      'OTP verification is not configured. No code has been verified.',
+    );
   }
 
   @override
@@ -62,6 +64,8 @@ class AuthRepository implements IAuthRepository {
 
   @override
   Future<void> updateRole(UserRole role) async {
+    // This is local UI state only. Authorization roles must be assigned and
+    // enforced by trusted backend policy, not by client-side state.
     _store.currentUser = _store.currentUser.copyWith(role: role);
   }
 
