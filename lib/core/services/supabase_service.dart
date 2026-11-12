@@ -432,12 +432,14 @@ class SupabaseService {
       if (voucherCode == null || voucherCode.trim().isEmpty) {
         return Stream.error(ArgumentError('A pickup voucher is required to access messages.'));
       }
-      return Stream.fromFuture(_client!.rpc('list_pickup_messages', params: {
-        'p_voucher_code': voucherCode.trim(),
-      }).then((result) {
+      return Stream.periodic(const Duration(seconds: 5))
+          .asyncMap((_) => _client!.rpc('list_pickup_messages', params: {
+            'p_voucher_code': voucherCode.trim(),
+          }))
+          .map((result) {
         if (result is! List) throw StateError('Invalid messages response');
-        return result.map((row) => DiscreetMessage.fromJson(Map<String, dynamic>.from(row as Map))).toList(growable: false);
-      }));
+        return (result as List).map((row) => DiscreetMessage.fromJson(Map<String, dynamic>.from(row as Map))).toList(growable: false);
+      });
     }
 
     return _messagesStreamController.stream.map((list) {
@@ -516,6 +518,12 @@ class SupabaseService {
     final result = await _client!.rpc('list_staff_locations', params: {'p_hub_id': hubId});
     if (result is! List) throw StateError('Invalid live-location response');
     return result.map((row) => Map<String, dynamic>.from(row as Map)).toList(growable: false);
+  }
+
+  Stream<List<Map<String, dynamic>>> streamStaffLocations(String hubId) {
+    if (!isLiveSupabase) return Stream.value(const <Map<String, dynamic>>[]);
+    return Stream.periodic(const Duration(seconds: 5))
+        .asyncMap((_) => fetchStaffLocations(hubId));
   }
 
   /// Configure credentials dynamically from the Settings UI
