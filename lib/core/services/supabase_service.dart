@@ -263,6 +263,26 @@ class SupabaseService {
     _authStreamController.add(null);
   }
 
+  // Fetch distribution points from Supabase when configured. In live mode,
+  // backend errors are surfaced instead of being hidden by mock data.
+  Future<List<DistributionPoint>> fetchDistributionPoints() async {
+    if (!isLiveSupabase) {
+      return List.unmodifiable(_mockStore.hubs);
+    }
+    final rows = await _client!.from('distribution_points').select();
+    return rows
+        .map((row) => DistributionPoint.fromJson(row))
+        .toList(growable: false);
+  }
+
+  Future<DistributionPoint?> fetchDistributionPointById(String id) async {
+    final points = await fetchDistributionPoints();
+    for (final point in points) {
+      if (point.id == id) return point;
+    }
+    return null;
+  }
+
   // ==========================================
   // REALTIME DISTRIBUTION POINTS (HUBS)
   // ==========================================
