@@ -42,9 +42,23 @@ Add the `SUPABASE_PUBLISHABLE_KEY` repository secret before expecting a live-con
 4. In **Authentication → URL Configuration**, configure only the redirect URLs you actually use.
 5. Test signup, sign-in, session restoration, creating a pickup request, and realtime updates on two separate devices.
 
-### Important security warning
+### Secure pickup operations (required before live use)
 
-The current `backend/supabase_schema.sql` contains broad public write policies for requests, messages, and live locations. Those policies are **not suitable for production**: a client with the public key could read or modify other users' data, create fake requests, or spoof locations. Do not deploy this schema for real users until those policies are replaced with least-privilege rules and request/message access is tied to an authenticated user or a server-validated voucher. Never put a Supabase service-role key in the mobile app.
+Do **not** apply `backend/supabase_schema.sql` as-is to a production project: its legacy policies grant broad public access. The production-readiness branch contains two migrations which must be reviewed and applied in order in the Supabase SQL Editor (prefer a staging project first):
+
+1. `backend/migrations/20261112_production_lockdown.sql` removes broad policies and disables direct client access to requests, messages and live locations.
+2. `backend/migrations/20261112_secure_pickup_operations.sql` adds server-side RPCs for request creation/listing, one-time voucher verification, voucher-scoped messaging, and authorized staff location publishing/reading.
+
+The mobile app calls those RPCs rather than writing sensitive tables directly. Pickup codes are generated server-side with high entropy; collection checks the expiry and status and requires an active staff assignment for the pickup hub. Message access requires the authenticated request owner or assigned hub staff. Location publishing and reading require an active staff assignment. Message and staff-location streams poll the authorized RPCs; they are not database-wide realtime subscriptions.
+
+**Before enabling these operations:**
+- Apply both migrations in order and verify they succeed. They have not been applied by this code change.
+- Create an auth user for each real caretaker/coordinator, then insert their verified user UUID and hub ID into `public.hub_staff` using the trusted Supabase SQL Editor/admin process. Never let the app write this table or self-assign staff roles.
+- Ensure anonymous sign-in is enabled if anonymous seekers are a supported flow. Anonymous sessions are still authenticated Supabase users.
+- Test with separate seeker and staff accounts: a seeker must only list their own requests; unrelated accounts must not read messages; only assigned staff may verify a code or publish/read locations; expired/already-collected codes must fail.
+- Do not publish actual location tracking until volunteers/staff have been informed and the app has clear consent and access rules.
+
+Never put a Supabase service-role/secret key in the mobile app. The publishable key is intended for client apps, but is safe only with correctly restricted database privileges and RPC authorization.
 
 The app handles sensitive menstrual-health and pickup information. Use synthetic test data until access controls have been reviewed. Verify the actual distribution partners and stock information before publishing any pickup locations.
 
