@@ -46,9 +46,14 @@ class SupabaseService {
   /// Initializes Supabase with either explicit credentials, local storage,
   /// or compile-time environment variables.
   Future<void> init({String? url, String? anonKey}) async {
+    final storedUrl = LocalStorage.getString(AppConstants.storageKeySupabaseUrl);
+    const configuredUrl = String.fromEnvironment(AppConstants.envSupabaseUrl);
     final effectiveUrl = url ??
-        LocalStorage.getString(AppConstants.storageKeySupabaseUrl) ??
-        const String.fromEnvironment(AppConstants.envSupabaseUrl);
+        (storedUrl?.isNotEmpty == true
+            ? storedUrl!
+            : (configuredUrl.isNotEmpty
+                ? configuredUrl
+                : AppConstants.defaultSupabaseUrl));
 
     final storedKey = LocalStorage.getString(AppConstants.storageKeySupabaseAnonKey);
     const publishableKey = String.fromEnvironment(AppConstants.envSupabasePublishableKey);
