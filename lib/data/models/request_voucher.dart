@@ -45,30 +45,30 @@ class RequestVoucher {
 
   Map<String, dynamic> toJson() => {
         'id': id,
-        'voucherCode': voucherCode,
-        'hubId': hubId,
-        'hubName': hubName,
-        'allocationSummary': allocationSummary,
+        'voucher_code': voucherCode,
+        'hub_id': hubId,
+        'hub_name': hubName,
+        'allocation_summary': allocationSummary,
         'status': status.name,
-        'createdAt': createdAt.toIso8601String(),
-        'expiresAt': expiresAt.toIso8601String(),
-        'pickupWindow': pickupWindow,
+        'created_at': createdAt.toIso8601String(),
+        'expires_at': expiresAt.toIso8601String(),
+        'pickup_window': pickupWindow,
         'pin': pin,
       };
 
   factory RequestVoucher.fromJson(Map<String, dynamic> json) => RequestVoucher(
         id: json['id'] as String,
-        voucherCode: json['voucherCode'] as String,
-        hubId: json['hubId'] as String,
-        hubName: json['hubName'] as String,
-        allocationSummary: json['allocationSummary'] as String,
+        voucherCode: (json['voucher_code'] ?? json['voucherCode']) as String,
+        hubId: (json['hub_id'] ?? json['hubId']) as String,
+        hubName: (json['hub_name'] ?? json['hubName']) as String,
+        allocationSummary: (json['allocation_summary'] ?? json['allocationSummary']) as String,
         status: VoucherStatus.values.firstWhere(
           (e) => e.name == json['status'],
           orElse: () => VoucherStatus.readyForPickup,
         ),
-        createdAt: DateTime.parse(json['createdAt'] as String),
-        expiresAt: DateTime.parse(json['expiresAt'] as String),
-        pickupWindow: json['pickupWindow'] as String? ?? 'Within the next 2 hours',
+        createdAt: DateTime.parse((json['created_at'] ?? json['createdAt']) as String),
+        expiresAt: DateTime.parse((json['expires_at'] ?? json['expiresAt']) as String),
+        pickupWindow: (json['pickup_window'] ?? json['pickupWindow']) as String? ?? 'Within the next 2 hours',
         pin: json['pin'] as String? ?? '749',
       );
 }
