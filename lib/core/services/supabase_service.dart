@@ -52,7 +52,11 @@ class SupabaseService {
 
     final effectiveKey = anonKey ??
         LocalStorage.getString(AppConstants.storageKeySupabaseAnonKey) ??
-        const String.fromEnvironment(AppConstants.envSupabaseAnonKey);
+        const String.fromEnvironment(AppConstants.envSupabasePublishableKey).isNotEmpty
+            ? (anonKey ??
+                LocalStorage.getString(AppConstants.storageKeySupabaseAnonKey) ??
+                const String.fromEnvironment(AppConstants.envSupabasePublishableKey))
+            : const String.fromEnvironment(AppConstants.envSupabaseAnonKey);
 
     if (effectiveUrl.isNotEmpty && effectiveKey.isNotEmpty) {
       try {
