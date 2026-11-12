@@ -17,8 +17,8 @@ To connect a Supabase project during a local run, use the project's **Project UR
 
 ```bash
 flutter run \
-  --dart-define=SUPABASE_URL=https://YOUR_PROJECT.supabase.co \
-  --dart-define=SUPABASE_ANON_KEY=YOUR_SUPABASE_PUBLISHABLE_OR_ANON_KEY
+  --dart-define=SUPABASE_URL=https://eztqoyhbcfcsxvommgxi.supabase.co \
+  --dart-define=SUPABASE_PUBLISHABLE_KEY=YOUR_SUPABASE_PUBLISHABLE_KEY
 ```
 
 The app reads Dart compile-time defines; creating a `.env` file by itself does not inject values into a Flutter build.
