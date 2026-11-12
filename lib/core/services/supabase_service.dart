@@ -340,17 +340,9 @@ class SupabaseService {
 
   Stream<List<RequestVoucher>> streamRequests() {
     if (isLiveSupabase) {
-      try {
-        return _client!
-            .from('requests')
-            .stream(primaryKey: ['id'])
-            .order('created_at', ascending: false)
-            .map((list) {
-          return list.map((map) => RequestVoucher.fromJson(map)).toList();
-        });
-      } catch (e) {
-        debugPrint('⚠️ [SupabaseService] Requests stream error: $e');
-      }
+      // Sensitive rows are not subscribed to directly. Fetch only the caller's
+      // requests through the ownership-checking RPC.
+      return Stream.fromFuture(listMyPickupRequests());
     }
     late StreamController<List<RequestVoucher>> controller;
     StreamSubscription? sub;
@@ -366,33 +358,50 @@ class SupabaseService {
     return controller.stream;
   }
 
-  Future<void> createRequest(RequestVoucher voucher) async {
+  Future<RequestVoucher> createRequest(RequestVoucher voucher) async {
     if (isLiveSupabase) {
-      try {
-        await _client!.from('requests').insert(voucher.toJson());
-        return;
-      } catch (e) {
-        debugPrint('⚠️ [SupabaseService] Live createRequest failed: $e');
-        rethrow;
-      }
+      final result = await _client!.rpc('create_pickup_request', params: {
+        'p_hub_id': voucher.hubId,
+        'p_allocation_summary': voucher.allocationSummary,
+        'p_pickup_window': voucher.pickupWindow,
+      });
+      if (result is! Map) throw StateError('Invalid pickup request response');
+      final created = RequestVoucher.fromJson(Map<String, dynamic>.from(result));
+      _mockStore.vouchers.insert(0, created);
+      _emitLocalRequests();
+      return created;
     }
-
     _mockStore.vouchers.insert(0, voucher);
     _emitLocalRequests();
+    return voucher;
+  }
+
+  Future<List<RequestVoucher>> listMyPickupRequests() async {
+    if (!isLiveSupabase) return List.unmodifiable(_mockStore.vouchers);
+    final result = await _client!.rpc('list_my_pickup_requests');
+    if (result is! List) throw StateError('Invalid pickup request list response');
+    return result.map((row) => RequestVoucher.fromJson(Map<String, dynamic>.from(row as Map))).toList(growable: false);
+  }
+
+  Future<bool> verifyPickupVoucher(String voucherCode) async {
+    if (isLiveSupabase) {
+      final result = await _client!.rpc('verify_pickup_voucher', params: {'p_voucher_code': voucherCode});
+      return result == true;
+    }
+    final idx = _mockStore.vouchers.indexWhere((v) => v.voucherCode == voucherCode || v.pin == voucherCode);
+    if (idx < 0) return false;
+    final v = _mockStore.vouchers[idx];
+    _mockStore.vouchers[idx] = RequestVoucher(
+      id: v.id, voucherCode: v.voucherCode, hubId: v.hubId, hubName: v.hubName,
+      allocationSummary: v.allocationSummary, status: VoucherStatus.collected,
+      createdAt: v.createdAt, expiresAt: v.expiresAt, pickupWindow: v.pickupWindow, pin: v.pin);
+    _emitLocalRequests();
+    return true;
   }
 
   Future<void> updateRequestStatus(String voucherId, VoucherStatus status) async {
     if (isLiveSupabase) {
-      try {
-        await _client!
-            .from('requests')
-            .update({'status': status.name})
-            .eq('id', voucherId);
-        return;
-      } catch (e) {
-        debugPrint('⚠️ [SupabaseService] Live update status failed: $e');
-        rethrow;
-      }
+      throw UnsupportedError('Pickup status changes must use the authorized voucher verification RPC.');
     }
 
     final idx = _mockStore.vouchers.indexWhere((v) => v.id == voucherId);
@@ -420,18 +429,15 @@ class SupabaseService {
 
   Stream<List<DiscreetMessage>> streamMessages({String? voucherCode}) {
     if (isLiveSupabase) {
-      try {
-        var query = _client!.from('messages').stream(primaryKey: ['id']);
-        return query.order('timestamp', ascending: true).map((list) {
-          final msgs = list.map((map) => DiscreetMessage.fromJson(map)).toList();
-          if (voucherCode != null && voucherCode.isNotEmpty) {
-            return msgs.where((m) => m.voucherCode == voucherCode).toList();
-          }
-          return msgs;
-        });
-      } catch (e) {
-        debugPrint('⚠️ [SupabaseService] Stream messages error: $e');
+      if (voucherCode == null || voucherCode.trim().isEmpty) {
+        return Stream.error(ArgumentError('A pickup voucher is required to access messages.'));
       }
+      return Stream.fromFuture(_client!.rpc('list_pickup_messages', params: {
+        'p_voucher_code': voucherCode.trim(),
+      }).then((result) {
+        if (result is! List) throw StateError('Invalid messages response');
+        return result.map((row) => DiscreetMessage.fromJson(Map<String, dynamic>.from(row as Map))).toList(growable: false);
+      }));
     }
 
     return _messagesStreamController.stream.map((list) {
@@ -444,13 +450,11 @@ class SupabaseService {
 
   Future<void> sendMessage(DiscreetMessage msg) async {
     if (isLiveSupabase) {
-      try {
-        await _client!.from('messages').insert(msg.toJson());
-        return;
-      } catch (e) {
-        debugPrint('⚠️ [SupabaseService] Live sendMessage failed: $e');
-        rethrow;
-      }
+      await _client!.rpc('send_pickup_message', params: {
+        'p_voucher_code': msg.voucherCode,
+        'p_message': msg.message,
+      });
+      return;
     }
 
     _mockStore.messages.add(msg);
@@ -482,15 +486,36 @@ class SupabaseService {
     };
 
     if (isLiveSupabase) {
-      try {
-        _client!.channel('live_locations').sendBroadcastMessage(
-              event: 'location_update',
-              payload: payload,
-            );
-      } catch (_) {}
+      // Unauthenticated broadcast channels bypass the database authorization model.
+      // Use publishStaffLocation() with an assigned hub instead.
+      throw UnsupportedError('Live location publishing requires an authorized hub assignment.');
     }
 
     _liveLocationsController.add(payload);
+  }
+
+  Future<void> publishStaffLocation({
+    required String hubId,
+    required double latitude,
+    required double longitude,
+    required String label,
+    required String type,
+  }) async {
+    if (!isLiveSupabase) throw StateError('Supabase is not configured.');
+    await _client!.rpc('publish_staff_location', params: {
+      'p_hub_id': hubId,
+      'p_latitude': latitude,
+      'p_longitude': longitude,
+      'p_label': label,
+      'p_type': type,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> fetchStaffLocations(String hubId) async {
+    if (!isLiveSupabase) return const [];
+    final result = await _client!.rpc('list_staff_locations', params: {'p_hub_id': hubId});
+    if (result is! List) throw StateError('Invalid live-location response');
+    return result.map((row) => Map<String, dynamic>.from(row as Map)).toList(growable: false);
   }
 
   /// Configure credentials dynamically from the Settings UI
