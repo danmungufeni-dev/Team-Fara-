@@ -342,7 +342,8 @@ class SupabaseService {
     if (isLiveSupabase) {
       // Sensitive rows are not subscribed to directly. Fetch only the caller's
       // requests through the ownership-checking RPC.
-      return Stream.fromFuture(listMyPickupRequests());
+      return Stream.periodic(const Duration(seconds: 5))
+          .asyncMap((_) => listMyPickupRequests());
     }
     late StreamController<List<RequestVoucher>> controller;
     StreamSubscription? sub;
