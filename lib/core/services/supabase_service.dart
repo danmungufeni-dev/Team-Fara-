@@ -135,7 +135,7 @@ class SupabaseService {
         await SecureStorage.writeToken(AppConstants.storageKeyUserToken, res.session?.accessToken ?? 'sb_token');
         return user;
       } catch (e) {
-        debugPrint('⚠️ [SupabaseService] Sign-up failed on live client, falling back to local: $e');
+        debugPrint('⚠️ [SupabaseService] Sign-up failed on live Supabase: $e');
         rethrow;
       }
     }
@@ -186,7 +186,7 @@ class SupabaseService {
         await SecureStorage.writeToken(AppConstants.storageKeyUserToken, res.session?.accessToken ?? 'sb_token');
         return user;
       } catch (e) {
-        debugPrint('⚠️ [SupabaseService] Sign-in failed on live client, falling back to local: $e');
+        debugPrint('⚠️ [SupabaseService] Sign-in failed on live Supabase: $e');
         rethrow;
       }
     }
@@ -226,7 +226,7 @@ class SupabaseService {
         _authStreamController.add(user);
         return user;
       } catch (e) {
-        debugPrint('⚠️ [SupabaseService] Anonymous auth failed on live client, falling back: $e');
+        debugPrint('⚠️ [SupabaseService] Anonymous auth failed on live Supabase: $e');
         rethrow;
       }
     }
