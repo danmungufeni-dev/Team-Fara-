@@ -50,13 +50,13 @@ class SupabaseService {
         LocalStorage.getString(AppConstants.storageKeySupabaseUrl) ??
         const String.fromEnvironment(AppConstants.envSupabaseUrl);
 
+    final storedKey = LocalStorage.getString(AppConstants.storageKeySupabaseAnonKey);
+    const publishableKey = String.fromEnvironment(AppConstants.envSupabasePublishableKey);
+    const legacyAnonKey = String.fromEnvironment(AppConstants.envSupabaseAnonKey);
     final effectiveKey = anonKey ??
-        LocalStorage.getString(AppConstants.storageKeySupabaseAnonKey) ??
-        const String.fromEnvironment(AppConstants.envSupabasePublishableKey).isNotEmpty
-            ? (anonKey ??
-                LocalStorage.getString(AppConstants.storageKeySupabaseAnonKey) ??
-                const String.fromEnvironment(AppConstants.envSupabasePublishableKey))
-            : const String.fromEnvironment(AppConstants.envSupabaseAnonKey);
+        (storedKey?.isNotEmpty == true
+            ? storedKey!
+            : (publishableKey.isNotEmpty ? publishableKey : legacyAnonKey));
 
     if (effectiveUrl.isNotEmpty && effectiveKey.isNotEmpty) {
       try {
